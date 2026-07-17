@@ -76,17 +76,21 @@ test("Binance asset labels appear after the trading pair only", async () => {
   assert.match(script, /`\$\{symbol\} \(\$\{market\.asset_label\}\)`/);
 });
 
-test("unlabelled Binance symbols link to Margin Pool search without opening history", async () => {
+test("supported Binance symbols link directly to Margin Pool assets", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
-  assert.match(script, /const poolSearch = marginPoolSearch\(market\)/);
-  assert.match(script, /new URLSearchParams\(\{ q: poolSearch\.query, exact: "1" \}\)/);
-  assert.match(script, /poolParams\.set\("contract", poolSearch\.contract\)/);
-  assert.match(script, /symbolControl\.href = `\/margin-pool\/\?\$\{poolParams\}`/);
+  const styles = await readFile(new URL("styles.css", staticDir), "utf8");
+  assert.match(script, /fetch\("\/margin-pool\/api\/v1\/pools"/);
+  assert.match(script, /const poolAsset = resolveMarginPoolAsset\(market, state\.marginPoolAssets\)/);
+  assert.match(script, /symbolControl\.href = `\/margin-pool\/assets\/\$\{encodeURIComponent\(poolAsset\)\}`/);
   assert.match(script, /symbolControl\.addEventListener\("click", \(event\) => event\.stopPropagation\(\)\)/);
+  assert.doesNotMatch(styles, /\.symbol-button:hover/);
+  assert.match(styles, /\.margin-pool-link:hover/);
 });
 
 test("launcher only serves static files", async () => {
   const launcher = await readFile(new URL("run_dashboard.sh", root), "utf8");
+  const nginx = await readFile(new URL("deploy/nginx-funding-rate-dashboard.conf", root), "utf8");
   assert.match(launcher, /-m http\.server/);
   assert.doesNotMatch(launcher, /uvicorn|FastAPI/);
+  assert.match(nginx, /connect-src 'self' https:\/\/fapi\.binance\.com/);
 });

@@ -11,6 +11,7 @@ import {
   fetchOpenInterest,
   marginPoolSearch,
   normalizedRates,
+  resolveMarginPoolAsset,
 } from "../web/exchanges.js";
 
 const originalFetch = globalThis.fetch;
@@ -92,6 +93,12 @@ test("only unlabelled Binance spot-like contracts link to normalized margin asse
   assert.deepEqual(marginPoolSearch({ exchange: "binance", base_asset: "龙虾", asset_label: null }), { query: "龙虾", contract: null });
   assert.equal(marginPoolSearch({ exchange: "binance", base_asset: "BTC", asset_label: "Alpha" }), null);
   assert.equal(marginPoolSearch({ exchange: "okx", base_asset: "BTC", asset_label: null }), null);
+
+  const supported = new Set(["BTC", "BONK", "1000SATS"]);
+  assert.equal(resolveMarginPoolAsset({ exchange: "binance", base_asset: "BTC", asset_label: null }, supported), "BTC");
+  assert.equal(resolveMarginPoolAsset({ exchange: "binance", base_asset: "1000BONK", asset_label: null }, supported), "BONK");
+  assert.equal(resolveMarginPoolAsset({ exchange: "binance", base_asset: "1000SATS", asset_label: null }, supported), "1000SATS");
+  assert.equal(resolveMarginPoolAsset({ exchange: "binance", base_asset: "MISSING", asset_label: null }, supported), null);
 });
 
 test("HTTP client rejects non-official hosts and retries transient failures", async () => {

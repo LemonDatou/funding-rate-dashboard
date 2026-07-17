@@ -24,6 +24,14 @@ export function marginPoolSearch(market) {
   return { query, contract: query === baseAsset ? null : baseAsset };
 }
 
+export function resolveMarginPoolAsset(market, supportedAssets) {
+  const candidates = marginPoolSearch(market);
+  if (!candidates || typeof supportedAssets?.has !== "function") return null;
+  if (supportedAssets.has(candidates.query)) return candidates.query;
+  if (candidates.contract && supportedAssets.has(candidates.contract)) return candidates.contract;
+  return null;
+}
+
 const ALLOWED_HOSTS = new Set([
   "fapi.binance.com",
   "www.okx.com",

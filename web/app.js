@@ -4,7 +4,7 @@ import {
   fetchHistory,
   fetchMarkets,
   fetchOpenInterest,
-  marginPoolSearch,
+  resolveMarginPoolAsset,
 } from "./exchanges.js";
 
 (() => {
@@ -25,6 +25,7 @@ import {
     intervalHours: null,
     search: "",
     loadingOpenInterest: new Set(),
+    marginPoolAssets: new Set(),
     generatedAt: null,
     history: null,
     historyRequestId: 0,
@@ -186,6 +187,26 @@ import {
       .sort((left, right) => compareMarkets(left, right, state.sortKey === "funding_rate" ? rateKey : state.sortKey));
   }
 
+  async function loadMarginPoolAssets() {
+    try {
+      const response = await fetch("/margin-pool/api/v1/pools", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "omit",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      state.marginPoolAssets = new Set(
+        items.map((item) => String(item?.symbol || "").trim().toUpperCase()).filter(Boolean),
+      );
+    } catch (_) {
+      state.marginPoolAssets = new Set();
+    }
+    renderRows();
+  }
+
   function compareMarkets(left, right, key) {
     let a = sortValue(left, key);
     let b = sortValue(right, key);
@@ -290,16 +311,14 @@ import {
       tr.title = "点击查看历史资金费率";
 
       const symbolCell = document.createElement("td");
-      const poolSearch = marginPoolSearch(market);
-      const symbolControl = document.createElement(poolSearch ? "a" : "button");
-      symbolControl.className = `symbol-button${poolSearch ? " margin-pool-link" : ""}`;
+      const poolAsset = resolveMarginPoolAsset(market, state.marginPoolAssets);
+      const symbolControl = document.createElement(poolAsset ? "a" : "button");
+      symbolControl.className = `symbol-button${poolAsset ? " margin-pool-link" : ""}`;
       symbolControl.textContent = displaySymbol(market);
-      if (poolSearch) {
-        const poolParams = new URLSearchParams({ q: poolSearch.query, exact: "1" });
-        if (poolSearch.contract) poolParams.set("contract", poolSearch.contract);
-        symbolControl.href = `/margin-pool/?${poolParams}`;
-        symbolControl.title = `在 Margin Pool 中查看 ${poolSearch.query}`;
-        symbolControl.setAttribute("aria-label", `在 Margin Pool 中查看 ${poolSearch.query}`);
+      if (poolAsset) {
+        symbolControl.href = `/margin-pool/assets/${encodeURIComponent(poolAsset)}`;
+        symbolControl.title = `在 Margin Pool 中查看 ${poolAsset}`;
+        symbolControl.setAttribute("aria-label", `在 Margin Pool 中查看 ${poolAsset}`);
         symbolControl.addEventListener("click", (event) => event.stopPropagation());
       } else {
         symbolControl.type = "button";
@@ -757,6 +776,7 @@ import {
   }
 
   bindControls();
+  loadMarginPoolAssets();
   loadExchange("binance");
   setInterval(updateCountdowns, 30_000);
 })();

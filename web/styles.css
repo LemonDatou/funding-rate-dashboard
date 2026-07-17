@@ -344,8 +344,8 @@ tbody tr[data-market-key]:focus-within {
   text-decoration: none;
 }
 
-.symbol-button:hover,
-.symbol-button:focus-visible {
+.margin-pool-link:hover,
+.margin-pool-link:focus-visible {
   text-decoration: underline;
 }
 
