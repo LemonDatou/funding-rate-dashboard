@@ -49,4 +49,5 @@ npm test
 ## 部署
 
 - `deploy/funding-rate-dashboard.service`：只监听 `127.0.0.1:18765` 的受限静态文件服务。
+- `deploy/nginx-global-security.conf`：关闭 Nginx 版本暴露的全局最小安全基线。
 - `deploy/nginx-funding-rate-dashboard.conf`：挂载到现有 HTTPS 虚拟主机的 Nginx 反代及安全响应头。
