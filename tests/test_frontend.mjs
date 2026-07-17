@@ -38,18 +38,22 @@ test("frontend loads exchanges on demand without aggregate endpoints", async () 
   assert.doesNotMatch(script, /\/api\/markets|\/api\/history/);
 });
 
-test("daily volume and open interest are the final two market columns", async () => {
+test("latest price sorts by 24h change before the final activity columns", async () => {
   const html = await readFile(new URL("index.html", staticDir), "utf8");
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   const volumeHeading = html.indexOf('data-sort="volume_24h_usd"');
   const openInterestHeading = html.indexOf('data-sort="open_interest_usd"');
+  const priceHeading = html.indexOf('data-sort="price_change_24h"');
 
-  assert.ok(volumeHeading > html.indexOf('data-sort="interval_hours"'));
+  assert.ok(priceHeading > html.indexOf('data-sort="interval_hours"'));
+  assert.ok(volumeHeading > priceHeading);
   assert.ok(openInterestHeading > volumeHeading);
   assert.match(
     script,
-    /intervalCell,\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
+    /intervalCell,\s*latestPriceCell\(market\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
   );
+  assert.match(script, /formatPrice\(market\.last_price\).*formatPriceChange\(market\.price_change_24h\)/s);
+  assert.match(script, /number\.toExponential\(3\)/);
 });
 
 test("rates use four decimals and symmetric funding bounds use compact notation", async () => {
@@ -70,6 +74,15 @@ test("Binance asset labels appear after the trading pair only", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   assert.match(script, /market\.exchange === "binance" && market\.asset_label/);
   assert.match(script, /`\$\{symbol\} \(\$\{market\.asset_label\}\)`/);
+});
+
+test("unlabelled Binance symbols link to Margin Pool search without opening history", async () => {
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  assert.match(script, /const poolSearch = marginPoolSearch\(market\)/);
+  assert.match(script, /new URLSearchParams\(\{ q: poolSearch\.query, exact: "1" \}\)/);
+  assert.match(script, /poolParams\.set\("contract", poolSearch\.contract\)/);
+  assert.match(script, /symbolControl\.href = `\/margin-pool\/\?\$\{poolParams\}`/);
+  assert.match(script, /symbolControl\.addEventListener\("click", \(event\) => event\.stopPropagation\(\)\)/);
 });
 
 test("launcher only serves static files", async () => {

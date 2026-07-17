@@ -4,6 +4,7 @@ import {
   fetchHistory,
   fetchMarkets,
   fetchOpenInterest,
+  marginPoolSearch,
 } from "./exchanges.js";
 
 (() => {
@@ -63,11 +64,21 @@ import {
   function formatPrice(value) {
     const number = finite(value);
     if (number === null) return "—";
+    if (number === 0) return "0";
     const absolute = Math.abs(number);
     if (absolute >= 1000) return number.toLocaleString("en-US", { maximumFractionDigits: 2 });
     if (absolute >= 1) return number.toLocaleString("en-US", { maximumFractionDigits: 4 });
-    if (absolute >= 0.01) return number.toFixed(5);
-    return number.toPrecision(5);
+    if (absolute >= 0.01) return number.toFixed(5).replace(/\.?0+$/, "");
+    if (absolute >= 0.0001) return number.toFixed(7).replace(/\.?0+$/, "");
+    return number.toExponential(3).replace(/\.0+e/, "e").replace(/(\.\d*?[1-9])0+e/, "$1e");
+  }
+
+  function formatPriceChange(value) {
+    const number = finite(value);
+    if (number === null) return "—";
+    const percent = number * 100;
+    const rounded = Object.is(Number(percent.toFixed(2)), -0) ? 0 : Number(percent.toFixed(2));
+    return `${rounded > 0 ? "+" : ""}${rounded.toFixed(2)}%`;
   }
 
   function formatRate(value) {
@@ -142,6 +153,13 @@ import {
     td.textContent = text;
     if (className) td.className = className;
     return td;
+  }
+
+  function latestPriceCell(market) {
+    return cell(
+      `${formatPrice(market.last_price)}(${formatPriceChange(market.price_change_24h)})`,
+      `numeric price-cell ${rateClass(market.price_change_24h)}`,
+    );
   }
 
   function displaySymbol(market) {
@@ -257,7 +275,7 @@ import {
       const tr = document.createElement("tr");
       tr.className = "empty-row";
       const td = cell(selectedTotal ? "当前筛选条件下没有市场" : (state.loadingExchanges.size ? "正在加载…" : "暂无可用数据"));
-      td.colSpan = 8;
+      td.colSpan = 9;
       tr.append(td);
       rowsElement.append(tr);
       updateSortIndicators();
@@ -272,18 +290,28 @@ import {
       tr.title = "点击查看历史资金费率";
 
       const symbolCell = document.createElement("td");
-      const symbolButton = document.createElement("button");
-      symbolButton.type = "button";
-      symbolButton.className = "symbol-button";
-      symbolButton.setAttribute("aria-haspopup", "dialog");
-      symbolButton.setAttribute("aria-label", `查看 ${displaySymbol(market)} 历史资金费率`);
-      symbolButton.textContent = displaySymbol(market);
-      symbolCell.append(symbolButton);
+      const poolSearch = marginPoolSearch(market);
+      const symbolControl = document.createElement(poolSearch ? "a" : "button");
+      symbolControl.className = `symbol-button${poolSearch ? " margin-pool-link" : ""}`;
+      symbolControl.textContent = displaySymbol(market);
+      if (poolSearch) {
+        const poolParams = new URLSearchParams({ q: poolSearch.query, exact: "1" });
+        if (poolSearch.contract) poolParams.set("contract", poolSearch.contract);
+        symbolControl.href = `/margin-pool/?${poolParams}`;
+        symbolControl.title = `在 Margin Pool 中查看 ${poolSearch.query}`;
+        symbolControl.setAttribute("aria-label", `在 Margin Pool 中查看 ${poolSearch.query}`);
+        symbolControl.addEventListener("click", (event) => event.stopPropagation());
+      } else {
+        symbolControl.type = "button";
+        symbolControl.setAttribute("aria-haspopup", "dialog");
+        symbolControl.setAttribute("aria-label", `查看 ${displaySymbol(market)} 历史资金费率`);
+      }
+      symbolCell.append(symbolControl);
       if (market.stale) {
         const dot = document.createElement("span");
         dot.className = "stale-dot";
         dot.title = "当前交易所正在使用最近一次成功缓存";
-        symbolButton.append(dot);
+        symbolControl.append(dot);
       }
       const exchangeCell = cell(market.exchange_label || market.exchange, "exchange-cell");
       const rateCell = cell(formatRate(market[rateKey]), `numeric ${rateClass(market[rateKey])}`);
@@ -307,6 +335,7 @@ import {
         nextCell,
         cell(fundingBounds(market), "numeric"),
         intervalCell,
+        latestPriceCell(market),
         cell(formatMoney(market.volume_24h_usd), "numeric"),
         openInterestCell(market),
       );

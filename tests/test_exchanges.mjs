@@ -9,6 +9,7 @@ import {
   fetchHistory,
   fetchMarkets,
   fetchOpenInterest,
+  marginPoolSearch,
   normalizedRates,
 } from "../web/exchanges.js";
 
@@ -26,7 +27,7 @@ function installFixtureFetch() {
     if (url.hostname === "fapi.binance.com") {
       if (url.pathname.endsWith("premiumIndex")) return json([{ symbol: "BTCUSDT", lastFundingRate: "0.0001", markPrice: "60000", nextFundingTime: 2_000_000_000_000, time: 1_999_000_000_000 }]);
       if (url.pathname.endsWith("fundingInfo")) return json([{ symbol: "BTCUSDT", fundingIntervalHours: 8, adjustedFundingRateCap: "0.02", adjustedFundingRateFloor: "-0.02" }]);
-      if (url.pathname.endsWith("ticker/24hr")) return json([{ symbol: "BTCUSDT", quoteVolume: "2000000" }]);
+      if (url.pathname.endsWith("ticker/24hr")) return json([{ symbol: "BTCUSDT", lastPrice: "694.61", priceChangePercent: "10.99", quoteVolume: "2000000" }]);
       if (url.pathname.endsWith("exchangeInfo")) return json({ symbols: [{ symbol: "BTCUSDT", underlyingType: "COIN", underlyingSubType: ["PoW"] }] });
       if (url.pathname.endsWith("openInterest")) return json({ openInterest: "10" });
       if (url.pathname.endsWith("fundingRate")) return json([{ fundingTime: 1_999_000_000_000, fundingRate: "0.0001" }]);
@@ -35,19 +36,19 @@ function installFixtureFetch() {
     if (url.hostname === "www.okx.com") {
       if (url.pathname.endsWith("funding-rate-history")) return json({ data: [{ fundingTime: "1999000000000", realizedRate: "0.0001" }] });
       if (url.pathname.endsWith("funding-rate")) return json({ data: [{ instId: "BTC-USDT-SWAP", fundingRate: "0.0001", nextFundingRate: "0.0002", fundingTime: "2000000000000", nextFundingTime: "2000028800000", maxFundingRate: "0.003", minFundingRate: "-0.003", ts: "1999000000000" }] });
-      if (url.pathname.endsWith("tickers")) return json({ data: [{ instId: "BTC-USDT-SWAP", last: "60000", volCcy24h: "20" }] });
+      if (url.pathname.endsWith("tickers")) return json({ data: [{ instId: "BTC-USDT-SWAP", last: "66000", open24h: "60000", volCcy24h: "20" }] });
       if (url.pathname.endsWith("open-interest")) return json({ data: [{ instId: "BTC-USDT-SWAP", oiUsd: "1000000" }] });
     }
 
     if (url.hostname === "api.bybit.com") {
       if (url.pathname.endsWith("instruments-info")) return json({ result: { list: [{ symbol: "BTCUSDT", baseCoin: "BTC", quoteCoin: "USDT", contractType: "LinearPerpetual", fundingInterval: 240, upperFundingRate: "0.004", lowerFundingRate: "-0.004" }] } });
-      if (url.pathname.endsWith("tickers")) return json({ time: 1_999_000_000_000, result: { list: [{ symbol: "BTCUSDT", fundingRate: "0.0001", markPrice: "60000", openInterestValue: "1000000", turnover24h: "2000000", nextFundingTime: "2000000000000" }] } });
+      if (url.pathname.endsWith("tickers")) return json({ time: 1_999_000_000_000, result: { list: [{ symbol: "BTCUSDT", fundingRate: "0.0001", markPrice: "60000", lastPrice: "60600", price24hPcnt: "0.01", openInterestValue: "1000000", turnover24h: "2000000", nextFundingTime: "2000000000000" }] } });
       if (url.pathname.endsWith("funding/history")) return json({ result: { list: [{ fundingRateTimestamp: "1999000000000", fundingRate: "0.0001" }] } });
     }
 
     if (url.hostname === "api.bitget.com") {
       if (url.pathname.endsWith("instruments")) return json({ data: [{ symbol: "BTCUSDT", baseCoin: "BTC", quoteCoin: "USDT", fundInterval: "8" }] });
-      if (url.pathname.endsWith("tickers")) return json({ requestTime: 1_999_000_000_000, data: [{ symbol: "BTCUSDT", fundingRate: "0.0001", markPrice: "60000", openInterest: "10", turnover24h: "2000000", ts: "1999000000000" }] });
+      if (url.pathname.endsWith("tickers")) return json({ requestTime: 1_999_000_000_000, data: [{ symbol: "BTCUSDT", fundingRate: "0.0001", markPrice: "60000", lastPrice: "58800", price24hPcnt: "-0.02", openInterest: "10", turnover24h: "2000000", ts: "1999000000000" }] });
       if (url.pathname.endsWith("current-fund-rate")) return json({ data: [{ symbol: "BTCUSDT", fundingRate: "0.0002", fundingRateInterval: "4", nextUpdate: "2000000000000", maxFundingRate: "0.005", minFundingRate: "-0.005" }] });
       if (url.pathname.endsWith("history-fund-rate")) return json({ data: { resultList: [{ fundingRateTimestamp: "1999000000000", fundingRate: "0.0001" }] } });
     }
@@ -55,7 +56,7 @@ function installFixtureFetch() {
     if (url.hostname === "api.hyperliquid.xyz") {
       if (body?.type === "perpDexs") return json([null]);
       if (body?.type === "fundingHistory") return json([{ time: 1_999_000_000_000, fundingRate: "0.0001" }]);
-      if (body?.type === "metaAndAssetCtxs") return json([{ universe: [{ name: "BTC" }] }, [{ funding: "0.0001", markPx: "60000", openInterest: "10", dayNtlVlm: "2000000" }]]);
+      if (body?.type === "metaAndAssetCtxs") return json([{ universe: [{ name: "BTC" }] }, [{ funding: "0.0001", markPx: "60000", midPx: "60000", prevDayPx: "50000", openInterest: "10", dayNtlVlm: "2000000" }]]);
     }
 
     throw new Error(`Unexpected request: ${url} ${JSON.stringify(body)}`);
@@ -83,6 +84,16 @@ test("Binance asset labels use primary type with Alpha as the only COIN exceptio
   assert.equal(binanceAssetLabel({ underlyingType: "PREMARKET", underlyingSubType: ["TradFi", "Pre-IPO"] }), "盘前");
 });
 
+test("only unlabelled Binance spot-like contracts link to normalized margin assets", () => {
+  assert.deepEqual(marginPoolSearch({ exchange: "binance", base_asset: "BTC", asset_label: null }), { query: "BTC", contract: null });
+  assert.deepEqual(marginPoolSearch({ exchange: "binance", base_asset: "1000BONK", asset_label: null }), { query: "BONK", contract: "1000BONK" });
+  assert.deepEqual(marginPoolSearch({ exchange: "binance", base_asset: "1000000MOG", asset_label: null }), { query: "MOG", contract: "1000000MOG" });
+  assert.deepEqual(marginPoolSearch({ exchange: "binance", base_asset: "1000X", asset_label: null }), { query: "X", contract: "1000X" });
+  assert.deepEqual(marginPoolSearch({ exchange: "binance", base_asset: "龙虾", asset_label: null }), { query: "龙虾", contract: null });
+  assert.equal(marginPoolSearch({ exchange: "binance", base_asset: "BTC", asset_label: "Alpha" }), null);
+  assert.equal(marginPoolSearch({ exchange: "okx", base_asset: "BTC", asset_label: null }), null);
+});
+
 test("HTTP client rejects non-official hosts and retries transient failures", async () => {
   await assert.rejects(() => fetchJson("https://example.com/data"), /非官方接口/);
   let calls = 0;
@@ -105,11 +116,15 @@ test("all five adapters map current markets and public history", async () => {
     assert.equal(markets.length, 1, `${exchange} current market`);
     assert.equal(markets[0].exchange, exchange);
     assert.ok(markets[0].funding_rate_8h !== null);
+    assert.ok(markets[0].last_price !== null);
+    assert.ok(markets[0].price_change_24h !== null);
     const history = await fetchHistory(exchange, markets[0].symbol, 2);
     assert.equal(history.exchange, exchange);
     assert.equal(history.points.length, 1, `${exchange} history`);
     if (exchange === "binance") {
       assert.ok(progress.length >= 2, "Binance should render before and after metadata enrichment");
+      assert.equal(markets[0].last_price, 694.61);
+      assert.equal(markets[0].price_change_24h, 0.1099);
       assert.equal(markets[0].open_interest_usd, null);
       assert.equal(await fetchOpenInterest("binance", markets[0].symbol, markets[0].mark_price), 600000);
     }

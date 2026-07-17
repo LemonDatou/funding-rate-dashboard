@@ -338,13 +338,19 @@ tbody tr[data-market-key]:focus-within {
 
 .symbol-button {
   padding: 0;
+  color: inherit;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .symbol-button:hover,
 .symbol-button:focus-visible {
   text-decoration: underline;
+}
+
+.price-cell {
+  min-width: 132px;
 }
 
 .oi-cell {

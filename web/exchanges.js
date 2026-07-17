@@ -14,6 +14,16 @@ export const EXCHANGE_LABELS = Object.freeze({
   hyperliquid: "Hyperliquid",
 });
 
+const BINANCE_CONTRACT_MULTIPLIER = /^(?:1000000|1000)(?=.+$)/;
+
+export function marginPoolSearch(market) {
+  if (!market || market.exchange !== "binance" || market.asset_label) return null;
+  const baseAsset = String(market.base_asset || "").split(":").pop().trim().toUpperCase();
+  if (!baseAsset || baseAsset.length > 64 || /[\u0000-\u001f\u007f]/.test(baseAsset)) return null;
+  const query = baseAsset.replace(BINANCE_CONTRACT_MULTIPLIER, "") || baseAsset;
+  return { query, contract: query === baseAsset ? null : baseAsset };
+}
+
 const ALLOWED_HOSTS = new Set([
   "fapi.binance.com",
   "www.okx.com",
@@ -79,6 +89,13 @@ function positiveProduct(...values) {
   const parsed = values.map(finite);
   if (parsed.some((value) => value === null)) return null;
   return Math.abs(parsed.reduce((product, value) => product * value, 1));
+}
+
+function relativePriceChange(current, previous) {
+  const currentPrice = finite(current);
+  const previousPrice = finite(previous);
+  if (currentPrice === null || previousPrice === null || previousPrice === 0) return null;
+  return (currentPrice - previousPrice) / previousPrice;
 }
 
 export function binanceAssetLabel(metadata) {
@@ -195,6 +212,8 @@ function makeMarket(exchange, {
   rate,
   intervalHours,
   markPrice = null,
+  lastPrice = null,
+  priceChange24h = null,
   openInterestUsd = null,
   volume24hUsd = null,
   nextFundingTime = null,
@@ -219,6 +238,8 @@ function makeMarket(exchange, {
     funding_rate_8h: normalized.rate_8h,
     funding_rate_1y: normalized.rate_1y,
     mark_price: finite(markPrice),
+    last_price: finite(lastPrice) ?? finite(markPrice),
+    price_change_24h: finite(priceChange24h),
     open_interest_usd: finite(openInterestUsd),
     volume_24h_usd: finite(volume24hUsd),
     next_funding_time: typeof nextFundingTime === "string" && nextFundingTime.endsWith("Z")
@@ -281,6 +302,8 @@ async function fetchBinanceMarkets({ signal, onProgress }) {
         rate: row.lastFundingRate,
         intervalHours: finite(details.fundingIntervalHours) || 8,
         markPrice: row.markPrice,
+        lastPrice: finite(ticker.lastPrice) ?? row.markPrice,
+        priceChange24h: finite(ticker.priceChangePercent) === null ? null : finite(ticker.priceChangePercent) / 100,
         openInterestUsd: cachedOi?.expiresAt > now ? cachedOi.value : null,
         volume24hUsd: ticker.quoteVolume,
         nextFundingTime: row.nextFundingTime,
@@ -372,6 +395,8 @@ async function fetchOkxMarkets({ signal }) {
         rate: row.fundingRate,
         intervalHours: okxInterval(row),
         markPrice: mark,
+        lastPrice: ticker.last,
+        priceChange24h: relativePriceChange(ticker.last, ticker.open24h),
         openInterestUsd: finite(oi.oiUsd) ?? positiveProduct(oi.oiCcy, mark),
         volume24hUsd: positiveProduct(ticker.volCcy24h, mark),
         nextFundingTime: row.fundingTime,
@@ -436,6 +461,8 @@ async function fetchBybitMarkets({ signal }) {
         rate: row.fundingRate,
         intervalHours: interval,
         markPrice: row.markPrice,
+        lastPrice: finite(row.lastPrice) ?? row.markPrice,
+        priceChange24h: finite(row.price24hPcnt),
         openInterestUsd: row.openInterestValue,
         volume24hUsd: row.turnover24h,
         nextFundingTime: row.nextFundingTime,
@@ -510,6 +537,10 @@ async function fetchBitgetMarkets({ signal }) {
     if (quote !== "USDT") continue;
     const interval = finite(funding.fundingRateInterval) || finite(instrument.fundInterval) || 8;
     const mark = row.markPrice;
+    const last = finite(row.lastPrice) ?? finite(row.lastPr) ?? mark;
+    const change24h = finite(row.price24hPcnt)
+      ?? finite(row.change24h)
+      ?? relativePriceChange(last, row.openPrice24h ?? row.open24h);
     try {
       markets.push(makeMarket("bitget", {
         symbol,
@@ -518,6 +549,8 @@ async function fetchBitgetMarkets({ signal }) {
         rate: funding.fundingRate ?? row.fundingRate,
         intervalHours: interval,
         markPrice: mark,
+        lastPrice: last,
+        priceChange24h: change24h,
         openInterestUsd: positiveProduct(row.openInterest ?? row.holdingAmount, mark),
         volume24hUsd: row.turnover24h ?? row.quoteVolume ?? row.usdtVolume,
         nextFundingTime: funding.nextUpdate || futureBoundaryMs(interval),
@@ -581,6 +614,7 @@ function hyperliquidMarkets(payload) {
     const context = contexts[index] || {};
     const symbol = String(instrument.name || "");
     const mark = finite(context.markPx);
+    const latest = finite(context.midPx) ?? mark;
     try {
       markets.push(makeMarket("hyperliquid", {
         symbol,
@@ -589,6 +623,8 @@ function hyperliquidMarkets(payload) {
         rate: context.funding,
         intervalHours: 1,
         markPrice: mark,
+        lastPrice: latest,
+        priceChange24h: relativePriceChange(latest, context.prevDayPx),
         openInterestUsd: positiveProduct(context.openInterest, mark),
         volume24hUsd: context.dayNtlVlm,
         nextFundingTime: nextHour,
