@@ -303,12 +303,12 @@ import {
       tr.append(
         exchangeCell,
         symbolCell,
-        openInterestCell(market),
-        cell(formatMoney(market.volume_24h_usd), "numeric"),
         rateCell,
         nextCell,
         cell(fundingBounds(market), "numeric"),
         intervalCell,
+        cell(formatMoney(market.volume_24h_usd), "numeric"),
+        openInterestCell(market),
       );
       tr.addEventListener("click", () => openHistory(market));
       fragment.append(tr);

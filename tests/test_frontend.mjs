@@ -38,6 +38,20 @@ test("frontend loads exchanges on demand without aggregate endpoints", async () 
   assert.doesNotMatch(script, /\/api\/markets|\/api\/history/);
 });
 
+test("daily volume and open interest are the final two market columns", async () => {
+  const html = await readFile(new URL("index.html", staticDir), "utf8");
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  const volumeHeading = html.indexOf('data-sort="volume_24h_usd"');
+  const openInterestHeading = html.indexOf('data-sort="open_interest_usd"');
+
+  assert.ok(volumeHeading > html.indexOf('data-sort="interval_hours"'));
+  assert.ok(openInterestHeading > volumeHeading);
+  assert.match(
+    script,
+    /intervalCell,\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
+  );
+});
+
 test("rates use four decimals and symmetric funding bounds use compact notation", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   assert.match(script, /percent\.toFixed\(4\)/);
