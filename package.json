@@ -1,0 +1,8 @@
+{
+  "name": "funding-rate-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.mjs"
+  }
+}

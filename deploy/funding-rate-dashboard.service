@@ -1,0 +1,43 @@
+[Unit]
+Description=Funding Rate Dashboard static server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/home/lemondatou/funding-rate-dashboard/web
+ExecStart=/usr/bin/python3 -m http.server 18765 --bind 127.0.0.1 --directory /home/lemondatou/funding-rate-dashboard/web
+Restart=on-failure
+RestartSec=2
+UMask=0077
+
+NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=read-only
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+IPAddressDeny=any
+IPAddressAllow=localhost
+ReadOnlyPaths=/home/lemondatou/funding-rate-dashboard/web
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="五家交易所永续合约资金费率看板" />
+    <title>Funding Matrix</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="filter-panel" aria-label="市场筛选">
+        <div class="filter-row filter-row-primary">
+          <label class="range-control">
+            <span>未平仓额 ≥ <strong id="oi-value">$1M</strong></span>
+            <input id="oi-filter" type="range" min="2" max="10" step="1" value="6" />
+          </label>
+          <label class="range-control">
+            <span>日成交额 ≥ <strong id="volume-value">$1M</strong></span>
+            <input id="volume-filter" type="range" min="2" max="10" step="1" value="6" />
+          </label>
+          <label class="range-control range-control-interval">
+            <span>间隔 = <strong id="interval-value">*H</strong></span>
+            <input id="interval-filter" type="range" min="-1" max="3" step="1" value="-1" />
+          </label>
+          <div class="brand" aria-label="Funding Matrix">
+            <span>F</span><span>u</span><span>n</span><span>d</span><span>i</span><span>n</span><span>g</span>
+            <span>&nbsp;</span><span>M</span><span>a</span><span>t</span><span>r</span><span>i</span><span>x</span>
+          </div>
+        </div>
+
+        <div id="exchange-filters" class="exchange-filters" aria-label="交易所">
+          <label><input type="checkbox" value="binance" checked />Binance</label>
+          <label><input type="checkbox" value="okx" />OKX</label>
+          <label><input type="checkbox" value="bybit" />Bybit</label>
+          <label><input type="checkbox" value="bitget" />Bitget</label>
+          <label><input type="checkbox" value="hyperliquid" />Hyperliquid</label>
+        </div>
+      </header>
+
+      <section class="data-panel">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <span id="market-count" aria-live="polite" aria-atomic="true">加载中…</span>
+            <span id="freshness" class="muted"></span>
+            <button id="error-summary" class="error-summary" type="button" aria-expanded="false" hidden></button>
+          </div>
+          <div class="toolbar-actions">
+            <div class="unit-switch" role="group" aria-label="费率换算周期">
+              <button type="button" data-unit="1y" class="active" aria-pressed="true">1Y</button>
+              <button type="button" data-unit="8h" aria-pressed="false">8H</button>
+            </div>
+            <button id="refresh" class="refresh" type="button" title="刷新数据" aria-label="刷新数据">↻</button>
+          </div>
+        </div>
+        <div id="error-details" class="error-details" role="status" hidden></div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th><button type="button" data-sort="exchange">交易所 <span></span></button></th>
+                <th>
+                  <label class="table-search">
+                    <span class="sr-only">搜索币种</span>
+                    <input id="search" type="search" placeholder="币种" autocomplete="off" />
+                  </label>
+                </th>
+                <th class="numeric"><button type="button" data-sort="open_interest_usd">未平仓额 <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="volume_24h_usd">日成交额 <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="funding_rate_1y" id="rate-heading">资金费率 1Y <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="next_funding_rate">下次资金费率 <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="funding_bounds">上限 / 下限 <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="interval_hours">间隔 <span></span></button></th>
+              </tr>
+            </thead>
+            <tbody id="market-rows">
+              <tr class="empty-row"><td colspan="8">正在连接 Binance…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        <div class="footer-meta">
+          <span>公开 API · 浏览器按需直连 · 单所失败自动停用</span>
+          <a
+            class="repo-link"
+            href="https://github.com/LemonDatou/funding-rate-dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="在 GitHub 查看 Funding Rate Dashboard 源代码"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 .7a11.3 11.3 0 0 0-3.57 22c.57.1.78-.24.78-.55v-2.18c-3.18.69-3.85-1.35-3.85-1.35-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.75 1.18 1.75 1.18 1.02 1.75 2.68 1.25 3.33.96.1-.74.4-1.25.73-1.54-2.54-.29-5.21-1.27-5.21-5.59 0-1.24.44-2.25 1.18-3.04-.12-.29-.51-1.45.11-3 0 0 .96-.31 3.11 1.16A10.8 10.8 0 0 1 12 6.29c.96 0 1.92.13 2.83.38 2.16-1.47 3.11-1.16 3.11-1.16.62 1.55.23 2.71.11 3 .74.79 1.18 1.8 1.18 3.04 0 4.33-2.68 5.29-5.23 5.58.41.35.78 1.05.78 2.12v2.9c0 .31.21.66.79.55A11.3 11.3 0 0 0 12 .7Z" />
+            </svg>
+            <span>GitHub</span>
+          </a>
+        </div>
+        <label>
+          <span class="sr-only">主题</span>
+          <select id="theme-select">
+            <option value="system">自动</option>
+            <option value="light">白天</option>
+            <option value="dark">黑夜</option>
+          </select>
+        </label>
+      </footer>
+    </main>
+
+    <dialog id="history-dialog" aria-labelledby="history-title">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow" id="history-exchange"></p>
+          <h2 id="history-title">历史资金费率</h2>
+        </div>
+        <button id="dialog-close" class="dialog-close" type="button" aria-label="关闭">×</button>
+      </div>
+      <div id="history-status" class="history-status">加载中…</div>
+      <div id="history-content" hidden>
+        <div id="history-stats" class="history-stats"></div>
+        <div class="chart-wrap">
+          <canvas id="history-chart" aria-label="历史资金费率折线图；详细数值见下方历史数据"></canvas>
+          <div id="chart-tooltip" class="chart-tooltip" hidden></div>
+        </div>
+        <details class="history-data">
+          <summary>查看历史数据</summary>
+          <div class="history-table-wrap">
+            <table>
+              <thead><tr><th>时间</th><th class="numeric">费率</th></tr></thead>
+              <tbody id="history-data-rows"></tbody>
+            </table>
+          </div>
+        </details>
+        <p class="history-note">简单年化：8H 等效费率 × 3 × 365；不包含复利。</p>
+      </div>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
