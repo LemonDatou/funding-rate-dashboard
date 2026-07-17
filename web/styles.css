@@ -8,8 +8,8 @@
   --line-soft: #e5e5e5;
   --hover: #fafafa;
   --surface: #ffffff;
-  --positive: #dc2626;
-  --negative: #15803d;
+  --positive: #15803d;
+  --negative: #dc2626;
   --accent: #2563eb;
   --error: #b91c1c;
 }
@@ -24,8 +24,8 @@
   --line-soft: #27272a;
   --hover: #18181b;
   --surface: #09090b;
-  --positive: #f87171;
-  --negative: #4ade80;
+  --positive: #4ade80;
+  --negative: #f87171;
   --accent: #60a5fa;
   --error: #fca5a5;
 }

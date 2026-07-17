@@ -37,6 +37,14 @@ test("rates use four decimals and symmetric funding bounds use compact notation"
   assert.match(script, /return `±\$\{formatRate\(Math\.abs\(cap\)\)\}`/);
 });
 
+test("positive rates are green and negative rates are red in both themes", async () => {
+  const styles = await readFile(new URL("styles.css", staticDir), "utf8");
+  assert.match(styles, /:root \{[^}]*--positive: #15803d;[^}]*--negative: #dc2626;/s);
+  assert.match(styles, /:root\[data-theme="dark"\] \{[^}]*--positive: #4ade80;[^}]*--negative: #f87171;/s);
+  assert.match(styles, /\.rate-positive \{ color: var\(--positive\); \}/);
+  assert.match(styles, /\.rate-negative \{ color: var\(--negative\); \}/);
+});
+
 test("Binance asset labels appear after the trading pair only", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   assert.match(script, /market\.exchange === "binance" && market\.asset_label/);
