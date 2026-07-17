@@ -23,7 +23,14 @@ test("page defaults to Binance and no longer exposes Gate", async () => {
 });
 
 test("frontend loads exchanges on demand without aggregate endpoints", async () => {
+  const html = await readFile(new URL("index.html", staticDir), "utf8");
   const script = await readFile(new URL("app.js", staticDir), "utf8");
+  assert.doesNotMatch(html, /id="oi-filter"|id="oi-value"/);
+  assert.match(html, /data-sort="open_interest_usd"/);
+  assert.match(script, /fetchOpenInterest/);
+  assert.match(script, /function openInterestCell\(market\)/);
+  assert.match(script, /event\.stopPropagation\(\)/);
+  assert.doesNotMatch(script, /minOpenInterest|oiInput/);
   assert.match(script, /loadExchange\("binance"\)/);
   assert.match(script, /await loadExchange\(exchange\)/);
   assert.match(script, /input\.disabled = true/);

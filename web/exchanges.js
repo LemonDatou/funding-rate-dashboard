@@ -300,38 +300,30 @@ async function fetchBinanceMarkets({ signal, onProgress }) {
     for (const market of markets) market.asset_label = binanceAssetLabel(metadata.get(market.symbol));
     onProgress?.(markets.map((market) => ({ ...market })));
   });
-
-  const pending = markets
-    .filter((market) => market.open_interest_usd === null)
-    .sort((left, right) => (right.volume_24h_usd || 0) - (left.volume_24h_usd || 0));
-  let cursor = 0;
-  let completed = 0;
-  const workers = Array.from({ length: Math.min(8, pending.length) }, async () => {
-    while (cursor < pending.length) {
-      const market = pending[cursor];
-      cursor += 1;
-      try {
-        const payload = await fetchJson(`${base}/fapi/v1/openInterest`, {
-          params: { symbol: market.symbol },
-          signal,
-        });
-        market.open_interest_usd = positiveProduct(payload?.openInterest, market.mark_price);
-        binanceOpenInterestCache.set(market.symbol, {
-          value: market.open_interest_usd,
-          expiresAt: Date.now() + OPEN_INTEREST_CACHE_MS,
-        });
-      } catch (error) {
-        if (signal?.aborted) throw error;
-        market.open_interest_usd = null;
-      }
-      completed += 1;
-      if (completed % 20 === 0 || completed === pending.length) {
-        onProgress?.(markets.map((item) => ({ ...item })));
-      }
-    }
-  });
-  await Promise.all([...workers, enrichMetadata]);
+  await enrichMetadata;
   return markets;
+}
+
+export async function fetchOpenInterest(exchange, symbol, markPrice, { signal, force = false } = {}) {
+  const normalizedExchange = String(exchange || "").toLowerCase();
+  if (normalizedExchange !== "binance") {
+    throw new ExchangeError(`${EXCHANGE_LABELS[normalizedExchange] || exchange} 未平仓额随全量行情获取`);
+  }
+  const normalizedSymbol = String(symbol || "").toUpperCase().trim();
+  if (!normalizedSymbol) throw new ExchangeError("缺少合约代码");
+  const cached = binanceOpenInterestCache.get(normalizedSymbol);
+  if (!force && cached?.expiresAt > Date.now()) return cached.value;
+  const payload = await fetchJson("https://fapi.binance.com/fapi/v1/openInterest", {
+    params: { symbol: normalizedSymbol },
+    signal,
+  });
+  const value = positiveProduct(payload?.openInterest, markPrice);
+  if (value === null) throw new ExchangeError("Binance 未返回有效未平仓额");
+  binanceOpenInterestCache.set(normalizedSymbol, {
+    value,
+    expiresAt: Date.now() + OPEN_INTEREST_CACHE_MS,
+  });
+  return value;
 }
 
 async function fetchBinanceHistory(symbol, limit, signal) {

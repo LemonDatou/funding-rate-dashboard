@@ -3,6 +3,7 @@ import {
   EXCHANGE_LABELS,
   fetchHistory,
   fetchMarkets,
+  fetchOpenInterest,
 } from "./exchanges.js";
 
 (() => {
@@ -19,10 +20,10 @@ import {
     sortKey: "funding_rate_1y",
     sortDirection: "desc",
     selectedExchanges: new Set(["binance"]),
-    minOpenInterest: 10 ** 6,
     minVolume: 10 ** 6,
     intervalHours: null,
     search: "",
+    loadingOpenInterest: new Set(),
     generatedAt: null,
     history: null,
     historyRequestId: 0,
@@ -161,12 +162,6 @@ import {
     const rateKey = `funding_rate_${state.unit}`;
     return state.markets
       .filter((market) => state.selectedExchanges.has(market.exchange))
-      .filter((market) => {
-        const openInterest = finite(market.open_interest_usd);
-        return openInterest === null && state.loadingExchanges.has(market.exchange)
-          ? true
-          : (openInterest ?? 0) >= state.minOpenInterest;
-      })
       .filter((market) => (finite(market.volume_24h_usd) ?? 0) >= state.minVolume)
       .filter((market) => state.intervalHours === null || Math.abs((finite(market.interval_hours) ?? -999) - state.intervalHours) < 0.01)
       .filter((market) => !query || `${market.symbol} ${displaySymbol(market)}`.toUpperCase().includes(query))
@@ -201,6 +196,49 @@ import {
       return cap !== null && floor !== null ? cap - floor : cap ?? (floor !== null ? Math.abs(floor) : null);
     }
     return market[key];
+  }
+
+  async function loadOpenInterest(market) {
+    const key = `${market.exchange}:${market.symbol}`;
+    if (state.loadingOpenInterest.has(key)) return;
+    state.loadingOpenInterest.add(key);
+    renderRows();
+    try {
+      const value = await fetchOpenInterest(
+        market.exchange,
+        market.symbol,
+        market.mark_price,
+      );
+      const current = state.markets.find((item) => `${item.exchange}:${item.symbol}` === key);
+      if (current) current.open_interest_usd = value;
+    } catch (error) {
+      showToast(`${market.exchange_label || market.exchange} ${displaySymbol(market)} 未平仓额加载失败`);
+    } finally {
+      state.loadingOpenInterest.delete(key);
+      renderRows();
+    }
+  }
+
+  function openInterestCell(market) {
+    const value = finite(market.open_interest_usd);
+    if (value !== null) return cell(formatMoney(value), "numeric oi-cell");
+    const td = cell("", "numeric oi-cell");
+    if (market.exchange !== "binance") return td;
+    const key = `${market.exchange}:${market.symbol}`;
+    const loading = state.loadingOpenInterest.has(key);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "oi-load";
+    button.disabled = loading;
+    button.textContent = loading ? "…" : "";
+    button.title = loading ? "正在加载未平仓额" : `点击加载 ${displaySymbol(market)} 未平仓额`;
+    button.setAttribute("aria-label", button.title);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      loadOpenInterest(market);
+    });
+    td.append(button);
+    return td;
   }
 
   function renderRows() {
@@ -265,7 +303,7 @@ import {
       tr.append(
         exchangeCell,
         symbolCell,
-        cell(formatMoney(market.open_interest_usd), "numeric"),
+        openInterestCell(market),
         cell(formatMoney(market.volume_24h_usd), "numeric"),
         rateCell,
         nextCell,
@@ -595,15 +633,9 @@ import {
   }
 
   function bindControls() {
-    const oiInput = $("#oi-filter");
     const volumeInput = $("#volume-filter");
     const intervalInput = $("#interval-filter");
 
-    oiInput.addEventListener("input", () => {
-      state.minOpenInterest = 10 ** Number(oiInput.value);
-      $("#oi-value").textContent = formatThreshold(state.minOpenInterest);
-      renderRows();
-    });
     volumeInput.addEventListener("input", () => {
       state.minVolume = 10 ** Number(volumeInput.value);
       $("#volume-value").textContent = formatThreshold(state.minVolume);

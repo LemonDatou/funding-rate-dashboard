@@ -8,6 +8,7 @@ import {
   fetchJson,
   fetchHistory,
   fetchMarkets,
+  fetchOpenInterest,
   normalizedRates,
 } from "../web/exchanges.js";
 
@@ -107,13 +108,16 @@ test("all five adapters map current markets and public history", async () => {
     const history = await fetchHistory(exchange, markets[0].symbol, 2);
     assert.equal(history.exchange, exchange);
     assert.equal(history.points.length, 1, `${exchange} history`);
-    if (exchange === "binance") assert.ok(progress.length >= 2, "Binance should render before and after OI enrichment");
+    if (exchange === "binance") {
+      assert.ok(progress.length >= 2, "Binance should render before and after metadata enrichment");
+      assert.equal(markets[0].open_interest_usd, null);
+      assert.equal(await fetchOpenInterest("binance", markets[0].symbol, markets[0].mark_price), 600000);
+    }
   }
 });
 
-test("Binance limits open-interest fan-out to eight concurrent requests", async () => {
-  let active = 0;
-  let maximum = 0;
+test("Binance loads open interest only for the clicked symbol and caches it", async () => {
+  let openInterestCalls = 0;
   const symbols = Array.from({ length: 20 }, (_, index) => `C${index}USDT`);
   globalThis.fetch = async (rawUrl) => {
     const url = new URL(rawUrl);
@@ -122,10 +126,7 @@ test("Binance limits open-interest fan-out to eight concurrent requests", async 
     if (url.pathname.endsWith("ticker/24hr")) return json(symbols.map((symbol) => ({ symbol, quoteVolume: "2000000" })));
     if (url.pathname.endsWith("exchangeInfo")) return json({ symbols: symbols.map((symbol) => ({ symbol, underlyingType: "COIN", underlyingSubType: [] })) });
     if (url.pathname.endsWith("openInterest")) {
-      active += 1;
-      maximum = Math.max(maximum, active);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      active -= 1;
+      openInterestCalls += 1;
       return json({ openInterest: "10" });
     }
     throw new Error(`Unexpected request: ${url}`);
@@ -134,8 +135,10 @@ test("Binance limits open-interest fan-out to eight concurrent requests", async 
   const progress = [];
   const markets = await fetchMarkets("binance", { onProgress: (items) => progress.push(items) });
   assert.equal(markets.length, 20);
-  assert.equal(maximum, 8);
+  assert.equal(openInterestCalls, 0);
   assert.ok(progress.length >= 2);
-  assert.ok(progress[0].every((market) => market.open_interest_usd === null));
-  assert.ok(markets.every((market) => market.open_interest_usd === 100));
+  assert.ok(markets.every((market) => market.open_interest_usd === null));
+  assert.equal(await fetchOpenInterest("binance", markets[0].symbol, markets[0].mark_price), 100);
+  assert.equal(await fetchOpenInterest("binance", markets[0].symbol, markets[0].mark_price), 100);
+  assert.equal(openInterestCalls, 1);
 });

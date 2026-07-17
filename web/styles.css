@@ -347,6 +347,30 @@ tbody tr[data-market-key]:focus-within {
   text-decoration: underline;
 }
 
+.oi-cell {
+  position: relative;
+  min-width: 88px;
+}
+
+.oi-load {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 7px 10px;
+  color: var(--muted);
+  text-align: right;
+  cursor: pointer;
+}
+
+.oi-load:hover,
+.oi-load:focus-visible {
+  background: var(--hover);
+}
+
+.oi-load:disabled {
+  cursor: wait;
+}
+
 .exchange-cell,
 .interval-cell,
 .countdown-cell {

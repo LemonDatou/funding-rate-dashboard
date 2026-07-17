@@ -13,10 +13,6 @@
       <header class="filter-panel" aria-label="市场筛选">
         <div class="filter-row filter-row-primary">
           <label class="range-control">
-            <span>未平仓额 ≥ <strong id="oi-value">$1M</strong></span>
-            <input id="oi-filter" type="range" min="2" max="10" step="1" value="6" />
-          </label>
-          <label class="range-control">
             <span>日成交额 ≥ <strong id="volume-value">$1M</strong></span>
             <input id="volume-filter" type="range" min="2" max="10" step="1" value="6" />
           </label>
@@ -72,7 +68,7 @@
                     <input id="search" type="search" placeholder="币种" autocomplete="off" />
                   </label>
                 </th>
-                <th class="numeric"><button type="button" data-sort="open_interest_usd">未平仓额 <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="open_interest_usd" title="Binance 点击空白单元格后按币对加载">未平仓额 <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="volume_24h_usd">日成交额 <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="funding_rate_1y" id="rate-heading">资金费率 1Y <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="next_funding_rate">下次资金费率 <span></span></button></th>
