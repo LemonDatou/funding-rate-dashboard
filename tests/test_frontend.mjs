@@ -15,6 +15,9 @@ test("page defaults to Binance and no longer exposes Gate", async () => {
   assert.doesNotMatch(html, /value="gate"|>Gate</);
   assert.match(html, /type="module" src="\.\/app\.js"/);
   assert.match(html, /id="toast"/);
+  assert.match(html, />LemonDatou</);
+  assert.match(html, /class="brand-link" href="\/margin-pool\/"/);
+  assert.match(html, /Margin Pool ↗/);
   assert.match(html, /href="https:\/\/github\.com\/LemonDatou\/funding-rate-dashboard"/);
   assert.match(html, /rel="noopener noreferrer"/);
 });
