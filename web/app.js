@@ -509,13 +509,30 @@ import {
 
   function renderHistoryStats() {
     if (!state.history?.points?.length) return;
-    const values = state.history.points.map(historyValue).filter((value) => value !== null);
+    const historyValues = state.history.points
+      .map((point) => ({
+        value: historyValue(point),
+        time: parseDate(point.timestamp).getTime(),
+      }))
+      .filter((item) => item.value !== null);
+    const values = historyValues.map((item) => item.value);
     if (!values.length) return;
-    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const validTimes = historyValues
+      .map((item) => item.time)
+      .filter(Number.isFinite);
+    const latestHistoryTime = validTimes.length ? Math.max(...validTimes) : null;
+    const sevenDaysAgo = latestHistoryTime === null ? null : latestHistoryTime - 7 * 24 * 60 * 60 * 1000;
+    const recentValues = sevenDaysAgo === null
+      ? values
+      : historyValues
+        .filter((item) => Number.isFinite(item.time) && item.time > sevenDaysAgo)
+        .map((item) => item.value);
+    const averageValues = recentValues.length ? recentValues : values;
+    const average = averageValues.reduce((sum, value) => sum + value, 0) / averageValues.length;
     const latest = values[values.length - 1];
     const items = [
       ["最新", formatRate(latest)],
-      ["平均", formatRate(average)],
+      ["近7日平均", formatRate(average)],
       ["最低", formatRate(Math.min(...values))],
       ["最高", formatRate(Math.max(...values))],
     ];

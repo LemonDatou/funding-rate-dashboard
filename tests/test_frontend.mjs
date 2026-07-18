@@ -120,6 +120,14 @@ test("supported assets overlay borrow rates as negative costs on the funding his
   assert.doesNotMatch(styles, /overflow-wrap: anywhere;/);
 });
 
+test("history stats label and calculate the average over the latest seven days", async () => {
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  assert.match(script, /latestHistoryTime - 7 \* 24 \* 60 \* 60 \* 1000/);
+  assert.match(script, /item\.time > sevenDaysAgo/);
+  assert.match(script, /\["近7日平均", formatRate\(average\)\]/);
+  assert.doesNotMatch(script, /\["平均", formatRate\(average\)\]/);
+});
+
 test("launcher only serves static files", async () => {
   const launcher = await readFile(new URL("run_dashboard.sh", root), "utf8");
   const nginx = await readFile(new URL("deploy/nginx-funding-rate-dashboard.conf", root), "utf8");
