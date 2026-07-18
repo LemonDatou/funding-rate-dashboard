@@ -589,14 +589,14 @@ dialog::backdrop {
 .chart-tooltip {
   position: absolute;
   bottom: 100%;
+  width: max-content;
   max-width: calc(100% - 16px);
   pointer-events: none;
   padding: 5px 7px;
   color: var(--bg);
   background: var(--text);
   transform: translateX(-50%);
-  white-space: pre-line;
-  overflow-wrap: anywhere;
+  white-space: pre;
   line-height: 1.45;
   z-index: 2;
 }

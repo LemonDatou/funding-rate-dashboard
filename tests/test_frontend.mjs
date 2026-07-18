@@ -115,7 +115,9 @@ test("supported assets overlay borrow rates as negative costs on the funding his
   assert.match(styles, /\.chart-tooltip \{[^}]*position: absolute;[^}]*bottom: 100%;/s);
   assert.match(styles, /transform: translateX\(-50%\)/);
   assert.match(styles, /overflow-x: hidden;/);
-  assert.match(styles, /white-space: pre-line;/);
+  assert.match(styles, /width: max-content;/);
+  assert.match(styles, /white-space: pre;/);
+  assert.doesNotMatch(styles, /overflow-wrap: anywhere;/);
 });
 
 test("launcher only serves static files", async () => {
