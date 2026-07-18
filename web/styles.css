@@ -11,6 +11,7 @@
   --positive: #15803d;
   --negative: #dc2626;
   --accent: #2563eb;
+  --borrow: #d97706;
   --error: #b91c1c;
 }
 
@@ -27,6 +28,7 @@
   --positive: #4ade80;
   --negative: #f87171;
   --accent: #60a5fa;
+  --borrow: #fbbf24;
   --error: #fca5a5;
 }
 
@@ -530,6 +532,42 @@ dialog::backdrop {
   border: 1px solid var(--line-soft);
 }
 
+.chart-legend {
+  min-height: 19px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: -3px 0 5px;
+  color: var(--muted);
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chart-legend [hidden] {
+  display: none;
+}
+
+.legend-line {
+  width: 18px;
+  border-top: 2px solid;
+}
+
+.funding-line {
+  border-color: var(--accent);
+}
+
+.borrow-line {
+  border-color: var(--borrow);
+}
+
+.borrow-status {
+  color: var(--faint);
+}
+
 #history-chart {
   display: block;
   width: 100%;
@@ -543,7 +581,8 @@ dialog::backdrop {
   color: var(--bg);
   background: var(--text);
   transform: translate(-50%, calc(-100% - 9px));
-  white-space: nowrap;
+  white-space: pre;
+  line-height: 1.45;
   z-index: 2;
 }
 

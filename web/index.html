@@ -122,8 +122,13 @@
       <div id="history-status" class="history-status">加载中…</div>
       <div id="history-content" hidden>
         <div id="history-stats" class="history-stats"></div>
+        <div class="chart-legend" aria-label="图例">
+          <span><i class="legend-line funding-line"></i>资金费率</span>
+          <span id="borrow-legend" hidden><i class="legend-line borrow-line"></i>借款利率</span>
+          <span id="borrow-status" class="borrow-status" hidden></span>
+        </div>
         <div class="chart-wrap">
-          <canvas id="history-chart" aria-label="历史资金费率折线图；详细数值见下方历史数据"></canvas>
+          <canvas id="history-chart" aria-label="历史资金费率与借款利率曲线；悬停可查看数值"></canvas>
           <div id="chart-tooltip" class="chart-tooltip" hidden></div>
         </div>
         <details class="history-data">
@@ -135,7 +140,7 @@
             </table>
           </div>
         </details>
-        <p class="history-note">简单年化：8H 等效费率 × 3 × 365；不包含复利。</p>
+        <p class="history-note">简单年化：资金费率按 8H 等效费率 × 3 × 365；借款利率按日利率 × 365。均不包含复利。</p>
       </div>
     </dialog>
 

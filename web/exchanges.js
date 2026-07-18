@@ -32,6 +32,47 @@ export function resolveMarginPoolAsset(market, supportedAssets) {
   return null;
 }
 
+export async function fetchMarginInterestHistory(
+  asset,
+  { fromMs = 0, toMs = Date.now(), signal } = {},
+) {
+  const normalizedAsset = String(asset || "").trim().toUpperCase();
+  if (!/^[A-Z0-9._-]{1,32}$/.test(normalizedAsset)) {
+    throw new ExchangeError("Margin Pool 资产代码无效");
+  }
+  const parameters = new URLSearchParams({
+    from_ms: String(Math.max(0, Math.trunc(fromMs))),
+    to_ms: String(Math.max(0, Math.trunc(toMs))),
+    max_points: "400",
+  });
+  const requestSignal = createAbortSignal(signal, 8_000);
+  try {
+    const response = await fetch(
+      `/margin-pool/api/v1/assets/${encodeURIComponent(normalizedAsset)}/interest-rates?${parameters}`,
+      {
+        method: "GET",
+        credentials: "omit",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: requestSignal.signal,
+      },
+    );
+    if (!response.ok) throw new ExchangeError(`Margin Pool HTTP ${response.status}`);
+    const payload = await response.json();
+    const points = rows(payload?.points)
+      .map((point) => ({
+        timestamp: finite(point.timestamp_ms),
+        daily_interest_rate: finite(point.daily_interest_rate),
+        vip_level: finite(point.vip_level),
+      }))
+      .filter((point) => point.timestamp !== null && point.daily_interest_rate !== null)
+      .sort((left, right) => left.timestamp - right.timestamp);
+    return { asset: normalizedAsset, points };
+  } finally {
+    requestSignal.cleanup();
+  }
+}
+
 const ALLOWED_HOSTS = new Set([
   "fapi.binance.com",
   "www.okx.com",

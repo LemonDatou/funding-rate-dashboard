@@ -7,6 +7,7 @@ import {
   clearCachesForTests,
   fetchJson,
   fetchHistory,
+  fetchMarginInterestHistory,
   fetchMarkets,
   fetchOpenInterest,
   marginPoolSearch,
@@ -113,6 +114,42 @@ test("HTTP client rejects non-official hosts and retries transient failures", as
   assert.deepEqual(await fetchJson("https://fapi.binance.com/fapi/v1/ping"), { ok: true });
   assert.equal(calls, 2);
   assert.equal(credentials, "omit");
+});
+
+test("Margin Pool interest history is loaded from the same-origin read-only API", async () => {
+  let requestedUrl;
+  globalThis.fetch = async (rawUrl, options) => {
+    requestedUrl = String(rawUrl);
+    assert.equal(options.credentials, "omit");
+    assert.equal(options.cache, "no-store");
+    return json({
+      points: [
+        {
+          timestamp_ms: 1_999_000_000_000,
+          daily_interest_rate: "0.00331892",
+          vip_level: 0,
+        },
+      ],
+    });
+  };
+  const result = await fetchMarginInterestHistory("om", {
+    fromMs: 1_998_000_000_000,
+    toMs: 2_000_000_000_000,
+  });
+  assert.equal(
+    requestedUrl,
+    "/margin-pool/api/v1/assets/OM/interest-rates?from_ms=1998000000000&to_ms=2000000000000&max_points=400",
+  );
+  assert.deepEqual(result, {
+    asset: "OM",
+    points: [
+      {
+        timestamp: 1_999_000_000_000,
+        daily_interest_rate: 0.00331892,
+        vip_level: 0,
+      },
+    ],
+  });
 });
 
 test("all five adapters map current markets and public history", async () => {

@@ -2,6 +2,7 @@ import {
   EXCHANGES,
   EXCHANGE_LABELS,
   fetchHistory,
+  fetchMarginInterestHistory,
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
@@ -490,6 +491,12 @@ import {
     return finite(point[`rate_${state.unit}`]);
   }
 
+  function borrowRateValue(point) {
+    const dailyRate = finite(point?.daily_interest_rate);
+    if (dailyRate === null) return null;
+    return state.unit === "1y" ? dailyRate * 365 : dailyRate / 3;
+  }
+
   function renderHistoryStats() {
     if (!state.history?.points?.length) return;
     const values = state.history.points.map(historyValue).filter((value) => value !== null);
@@ -545,9 +552,33 @@ import {
       if (requestId !== state.historyRequestId || !dialog.open) return;
       const points = Array.isArray(payload.points) ? payload.points : [];
       if (!points.length) throw new Error("该市场暂无公开历史记录");
-      state.history = { ...payload, points, market };
+      const poolAsset = resolveMarginPoolAsset(market, state.marginPoolAssets);
+      let borrowPoints = [];
+      let borrowError = null;
+      if (poolAsset) {
+        const times = points
+          .map((point) => parseDate(point.timestamp).getTime())
+          .filter(Number.isFinite);
+        if (times.length) {
+          try {
+            const borrowPayload = await fetchMarginInterestHistory(poolAsset, {
+              fromMs: Math.max(0, Math.min(...times) - 86_400_000),
+              toMs: Math.max(...times),
+            });
+            borrowPoints = borrowPayload.points;
+          } catch (error) {
+            borrowError = error;
+          }
+        }
+      }
+      if (requestId !== state.historyRequestId || !dialog.open) return;
+      state.history = { ...payload, points, market, poolAsset, borrowPoints, borrowError };
       $("#history-status").hidden = true;
       $("#history-content").hidden = false;
+      $("#borrow-legend").hidden = !borrowPoints.length;
+      const borrowStatus = $("#borrow-status");
+      borrowStatus.hidden = !poolAsset || Boolean(borrowPoints.length);
+      borrowStatus.textContent = borrowError ? "借款利率加载失败" : "借款利率暂无历史";
       renderHistoryStats();
       requestAnimationFrame(drawHistoryChart);
     } catch (error) {
@@ -559,10 +590,26 @@ import {
 
   function drawHistoryChart() {
     if (!state.history?.points?.length || $("#history-content").hidden) return;
-    const points = state.history.points
+    const fundingPoints = state.history.points
       .map((point) => ({ point, value: historyValue(point), time: parseDate(point.timestamp).getTime() }))
       .filter((item) => item.value !== null && Number.isFinite(item.time));
-    if (!points.length) return;
+    if (!fundingPoints.length) return;
+
+    const minTime = fundingPoints[0].time;
+    const maxTime = fundingPoints[fundingPoints.length - 1].time;
+    const rawBorrowPoints = (state.history.borrowPoints || [])
+      .map((point) => ({ point, value: borrowRateValue(point), time: finite(point.timestamp) }))
+      .filter((item) => item.value !== null && item.time !== null && item.time <= maxTime)
+      .sort((left, right) => left.time - right.time);
+    const borrowPoints = [];
+    const baseline = [...rawBorrowPoints].reverse().find((item) => item.time <= minTime);
+    if (baseline) borrowPoints.push({ ...baseline, time: minTime });
+    borrowPoints.push(...rawBorrowPoints.filter((item) => item.time > minTime && item.time <= maxTime));
+    const latestBorrow = borrowPoints[borrowPoints.length - 1];
+    if (latestBorrow && latestBorrow.time < maxTime) {
+      borrowPoints.push({ ...latestBorrow, time: maxTime });
+    }
+    const allValues = [...fundingPoints, ...borrowPoints].map((item) => item.value);
 
     const rect = canvas.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
@@ -576,6 +623,7 @@ import {
       text: styles.getPropertyValue("--muted").trim(),
       line: styles.getPropertyValue("--line-soft").trim(),
       accent: styles.getPropertyValue("--accent").trim(),
+      borrow: styles.getPropertyValue("--borrow").trim(),
       zero: styles.getPropertyValue("--line").trim(),
     };
     const width = rect.width;
@@ -583,8 +631,8 @@ import {
     const padding = { top: 18, right: 18, bottom: 34, left: 70 };
     const plotWidth = Math.max(1, width - padding.left - padding.right);
     const plotHeight = Math.max(1, height - padding.top - padding.bottom);
-    let minimum = Math.min(...points.map((item) => item.value));
-    let maximum = Math.max(...points.map((item) => item.value));
+    let minimum = Math.min(...allValues);
+    let maximum = Math.max(...allValues);
     if (minimum === maximum) {
       const spread = Math.abs(minimum) || 0.000001;
       minimum -= spread * 0.2;
@@ -594,8 +642,6 @@ import {
       minimum -= spread * 0.08;
       maximum += spread * 0.08;
     }
-    const minTime = points[0].time;
-    const maxTime = points[points.length - 1].time;
     const timeSpread = Math.max(1, maxTime - minTime);
     const xFor = (time) => padding.left + ((time - minTime) / timeSpread) * plotWidth;
     const yFor = (value) => padding.top + ((maximum - value) / (maximum - minimum)) * plotHeight;
@@ -628,48 +674,82 @@ import {
       context.setLineDash([]);
     }
 
-    context.strokeStyle = colors.accent;
-    context.lineWidth = 1.6;
-    context.beginPath();
-    points.forEach((item, index) => {
-      const x = xFor(item.time);
-      const y = yFor(item.value);
-      if (index === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    });
-    context.stroke();
+    const drawSeries = (series, color, { stepped = false } = {}) => {
+      if (!series.length) return;
+      context.strokeStyle = color;
+      context.lineWidth = 1.6;
+      context.beginPath();
+      series.forEach((item, index) => {
+        const x = xFor(item.time);
+        const y = yFor(item.value);
+        if (index === 0) {
+          context.moveTo(x, y);
+        } else if (stepped) {
+          const previous = series[index - 1];
+          context.lineTo(x, yFor(previous.value));
+          context.lineTo(x, y);
+        } else {
+          context.lineTo(x, y);
+        }
+      });
+      context.stroke();
+    };
+    drawSeries(fundingPoints, colors.accent);
+    drawSeries(borrowPoints, colors.borrow, { stepped: true });
 
     context.fillStyle = colors.text;
     context.textAlign = "left";
     context.textBaseline = "top";
-    context.fillText(formatTimestamp(points[0].point.timestamp), padding.left, height - 23);
+    context.fillText(formatTimestamp(fundingPoints[0].point.timestamp), padding.left, height - 23);
     context.textAlign = "right";
-    context.fillText(formatTimestamp(points[points.length - 1].point.timestamp), width - padding.right, height - 23);
-    canvas._chartGeometry = { points, padding, plotWidth, xFor, yFor };
+    context.fillText(formatTimestamp(fundingPoints[fundingPoints.length - 1].point.timestamp), width - padding.right, height - 23);
+    canvas._chartGeometry = { fundingPoints, borrowPoints, padding, plotWidth, xFor, yFor };
   }
 
   function handleChartPointer(event) {
     const geometry = canvas._chartGeometry;
-    if (!geometry?.points?.length) return;
+    if (!geometry?.fundingPoints?.length) return;
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
     if (x < geometry.padding.left || x > geometry.padding.left + geometry.plotWidth) {
       tooltip.hidden = true;
       return;
     }
-    let nearest = geometry.points[0];
-    let distance = Infinity;
-    for (const item of geometry.points) {
-      const nextDistance = Math.abs(geometry.xFor(item.time) - x);
-      if (nextDistance < distance) {
-        nearest = item;
-        distance = nextDistance;
+    const nearestByX = (series) => {
+      let nearest = null;
+      let distance = Infinity;
+      for (const item of series) {
+        const nextDistance = Math.abs(geometry.xFor(item.time) - x);
+        if (nextDistance < distance) {
+          nearest = item;
+          distance = nextDistance;
+        }
       }
-    }
+      return nearest;
+    };
+    const fundingNearest = nearestByX(geometry.fundingPoints);
+    const firstBorrow = geometry.borrowPoints[0];
+    const borrowNearest = firstBorrow && x >= geometry.xFor(firstBorrow.time)
+      ? nearestByX(geometry.borrowPoints)
+      : null;
+    const candidates = [fundingNearest, borrowNearest].filter(Boolean);
+    const anchor = candidates.reduce((nearest, item) => {
+      const distance = Math.hypot(
+        geometry.xFor(item.time) - x,
+        geometry.yFor(item.value) - y,
+      );
+      return !nearest || distance < nearest.distance ? { item, distance } : nearest;
+    }, null)?.item;
+    if (!anchor) return;
     tooltip.hidden = false;
-    tooltip.textContent = `${formatTimestamp(nearest.point.timestamp)} · ${formatRate(nearest.value)}`;
-    tooltip.style.left = `${geometry.xFor(nearest.time)}px`;
-    tooltip.style.top = `${geometry.yFor(nearest.value)}px`;
+    tooltip.textContent = [
+      formatTimestamp(anchor.time),
+      `资金费率 ${formatRate(fundingNearest?.value)}`,
+      ...(borrowNearest ? [`借款利率 ${formatRate(borrowNearest.value)}`] : []),
+    ].join("\n");
+    tooltip.style.left = `${geometry.xFor(anchor.time)}px`;
+    tooltip.style.top = `${geometry.yFor(anchor.value)}px`;
   }
 
   function applyTheme(value) {
