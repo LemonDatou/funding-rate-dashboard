@@ -92,17 +92,30 @@ test("supported assets overlay borrow rates as negative costs on the funding his
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   const styles = await readFile(new URL("styles.css", staticDir), "utf8");
   assert.match(html, /id="borrow-legend"/);
+  assert.match(html, /id="chart-guide"/);
   assert.match(html, /历史资金费率与借款成本曲线/);
   assert.match(script, /fetchMarginInterestHistory\(poolAsset/);
   assert.match(script, /state\.unit === "1y" \? dailyRate \* 365 : dailyRate \/ 3/);
   assert.match(script, /value: rawValue === null \? null : -rawValue/);
   assert.match(script, /drawSeries\(borrowPoints, colors\.borrow, \{ stepped: true \}\)/);
   assert.match(script, /`资金费率 \$\{formatRate\(fundingNearest\?\.value\)\}`/);
-  assert.match(script, /`借款成本 \$\{formatRate\(borrowNearest\.value\)\}（原始利率 \$\{formatRate\(borrowNearest\.rawValue\)\}）`/);
+  assert.match(script, /`借款成本 \$\{formatRate\(borrowNearest\.value\)\}`/);
+  assert.match(script, /`原始利率 \$\{formatRate\(borrowNearest\.rawValue\)\}`/);
+  assert.match(script, /top: 18,[\s\S]*right: Math\.min\(116, Math\.max\(64, width \* 0\.2\)\)[\s\S]*left: 76/);
+  assert.match(script, /tooltip\.style\.left = `\$\{guideLeft\}px`/);
+  assert.match(script, /chartGuide\.style\.left = `\$\{guideLeft\}px`/);
+  assert.match(script, /const xTickCount = Math\.max\(3, Math\.min\(6, Math\.floor\(plotWidth \/ 120\) \+ 1\)\)/);
+  assert.match(script, /context\.fillText\(formatAxisDate\(time\), x, height - 23\)/);
+  assert.doesNotMatch(script, /context\.fillText\(formatTimestamp\(fundingPoints/);
+  assert.doesNotMatch(script, /tooltip\.style\.top/);
   assert.match(html, /借款成本（负值）/);
   assert.match(html, /并作为成本以负值绘制/);
   assert.match(styles, /--borrow:/);
-  assert.match(styles, /white-space: pre;/);
+  assert.match(styles, /\.chart-guide \{[^}]*bottom: 34px;[^}]*border-left: 1px dashed var\(--line\);/s);
+  assert.match(styles, /\.chart-tooltip \{[^}]*position: absolute;[^}]*bottom: 100%;/s);
+  assert.match(styles, /transform: translateX\(-50%\)/);
+  assert.match(styles, /overflow-x: hidden;/);
+  assert.match(styles, /white-space: pre-line;/);
 });
 
 test("launcher only serves static files", async () => {

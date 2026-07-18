@@ -36,6 +36,7 @@ import {
   const rowsElement = $("#market-rows");
   const dialog = $("#history-dialog");
   const canvas = $("#history-chart");
+  const chartGuide = $("#chart-guide");
   const tooltip = $("#chart-tooltip");
 
   function finite(value) {
@@ -108,6 +109,15 @@ import {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
+    }).format(date);
+  }
+
+  function formatAxisDate(value) {
+    const date = parseDate(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "2-digit",
+      day: "2-digit",
     }).format(date);
   }
 
@@ -589,6 +599,7 @@ import {
   }
 
   function drawHistoryChart() {
+    hideChartPointer();
     if (!state.history?.points?.length || $("#history-content").hidden) return;
     const fundingPoints = state.history.points
       .map((point) => ({ point, value: historyValue(point), time: parseDate(point.timestamp).getTime() }))
@@ -636,7 +647,12 @@ import {
     };
     const width = rect.width;
     const height = rect.height;
-    const padding = { top: 18, right: 18, bottom: 34, left: 70 };
+    const padding = {
+      top: 18,
+      right: Math.min(116, Math.max(64, width * 0.2)),
+      bottom: 34,
+      left: 76,
+    };
     const plotWidth = Math.max(1, width - padding.left - padding.right);
     const plotHeight = Math.max(1, height - padding.top - padding.bottom);
     let minimum = Math.min(...allValues);
@@ -705,13 +721,27 @@ import {
     drawSeries(fundingPoints, colors.accent);
     drawSeries(borrowPoints, colors.borrow, { stepped: true });
 
+    const xTickCount = Math.max(3, Math.min(6, Math.floor(plotWidth / 120) + 1));
     context.fillStyle = colors.text;
-    context.textAlign = "left";
+    context.strokeStyle = colors.line;
     context.textBaseline = "top";
-    context.fillText(formatTimestamp(fundingPoints[0].point.timestamp), padding.left, height - 23);
-    context.textAlign = "right";
-    context.fillText(formatTimestamp(fundingPoints[fundingPoints.length - 1].point.timestamp), width - padding.right, height - 23);
+    for (let index = 0; index < xTickCount; index += 1) {
+      const ratioX = index / (xTickCount - 1);
+      const time = minTime + ratioX * timeSpread;
+      const x = xFor(time);
+      context.beginPath();
+      context.moveTo(x, height - padding.bottom);
+      context.lineTo(x, height - padding.bottom + 4);
+      context.stroke();
+      context.textAlign = index === 0 ? "left" : index === xTickCount - 1 ? "right" : "center";
+      context.fillText(formatAxisDate(time), x, height - 23);
+    }
     canvas._chartGeometry = { fundingPoints, borrowPoints, padding, plotWidth, xFor, yFor };
+  }
+
+  function hideChartPointer() {
+    tooltip.hidden = true;
+    chartGuide.hidden = true;
   }
 
   function handleChartPointer(event) {
@@ -721,7 +751,7 @@ import {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     if (x < geometry.padding.left || x > geometry.padding.left + geometry.plotWidth) {
-      tooltip.hidden = true;
+      hideChartPointer();
       return;
     }
     const nearestByX = (series) => {
@@ -749,17 +779,23 @@ import {
       );
       return !nearest || distance < nearest.distance ? { item, distance } : nearest;
     }, null)?.item;
-    if (!anchor) return;
+    if (!anchor) {
+      hideChartPointer();
+      return;
+    }
     tooltip.hidden = false;
+    chartGuide.hidden = false;
     tooltip.textContent = [
       formatTimestamp(anchor.time),
       `资金费率 ${formatRate(fundingNearest?.value)}`,
       ...(borrowNearest ? [
-        `借款成本 ${formatRate(borrowNearest.value)}（原始利率 ${formatRate(borrowNearest.rawValue)}）`,
+        `借款成本 ${formatRate(borrowNearest.value)}`,
+        `原始利率 ${formatRate(borrowNearest.rawValue)}`,
       ] : []),
     ].join("\n");
-    tooltip.style.left = `${geometry.xFor(anchor.time)}px`;
-    tooltip.style.top = `${geometry.yFor(anchor.value)}px`;
+    const guideLeft = geometry.xFor(anchor.time);
+    tooltip.style.left = `${guideLeft}px`;
+    chartGuide.style.left = `${guideLeft}px`;
   }
 
   function applyTheme(value) {
@@ -846,10 +882,10 @@ import {
     dialog.addEventListener("close", () => {
       state.historyRequestId += 1;
       state.history = null;
-      tooltip.hidden = true;
+      hideChartPointer();
     });
     canvas.addEventListener("pointermove", handleChartPointer);
-    canvas.addEventListener("pointerleave", () => { tooltip.hidden = true; });
+    canvas.addEventListener("pointerleave", hideChartPointer);
 
     const themeSelect = $("#theme-select");
     const storedTheme = localStorage.getItem("funding-matrix-theme") || "system";
