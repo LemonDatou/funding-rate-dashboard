@@ -99,8 +99,8 @@ test("supported assets overlay borrow rates as negative costs on the funding his
   assert.match(script, /value: rawValue === null \? null : -rawValue/);
   assert.match(script, /drawSeries\(borrowPoints, colors\.borrow, \{ stepped: true \}\)/);
   assert.match(script, /`资金费率 \$\{formatRate\(fundingNearest\?\.value\)\}`/);
-  assert.match(script, /`借款成本 \$\{formatRate\(borrowNearest\.value\)\}`/);
-  assert.match(script, /`原始利率 \$\{formatRate\(borrowNearest\.rawValue\)\}`/);
+  assert.match(script, /`借款成本 \$\{formatRate\(borrowNearest\.rawValue\)\}`/);
+  assert.doesNotMatch(script, /`原始利率 /);
   assert.match(script, /top: 18,[\s\S]*right: Math\.min\(116, Math\.max\(64, width \* 0\.2\)\)[\s\S]*left: 76/);
   assert.match(script, /tooltip\.style\.left = `\$\{guideLeft\}px`/);
   assert.match(script, /chartGuide\.style\.left = `\$\{guideLeft\}px`/);

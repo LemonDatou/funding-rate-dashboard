@@ -789,8 +789,7 @@ import {
       formatTimestamp(anchor.time),
       `资金费率 ${formatRate(fundingNearest?.value)}`,
       ...(borrowNearest ? [
-        `借款成本 ${formatRate(borrowNearest.value)}`,
-        `原始利率 ${formatRate(borrowNearest.rawValue)}`,
+        `借款成本 ${formatRate(borrowNearest.rawValue)}`,
       ] : []),
     ].join("\n");
     const guideLeft = geometry.xFor(anchor.time);
