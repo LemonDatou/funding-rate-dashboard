@@ -87,17 +87,20 @@ test("supported Binance symbols link directly to Margin Pool assets", async () =
   assert.match(styles, /\.margin-pool-link:hover/);
 });
 
-test("supported assets overlay borrow rates on the funding history chart", async () => {
+test("supported assets overlay borrow rates as negative costs on the funding history chart", async () => {
   const html = await readFile(new URL("index.html", staticDir), "utf8");
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   const styles = await readFile(new URL("styles.css", staticDir), "utf8");
   assert.match(html, /id="borrow-legend"/);
-  assert.match(html, /历史资金费率与借款利率曲线/);
+  assert.match(html, /历史资金费率与借款成本曲线/);
   assert.match(script, /fetchMarginInterestHistory\(poolAsset/);
   assert.match(script, /state\.unit === "1y" \? dailyRate \* 365 : dailyRate \/ 3/);
+  assert.match(script, /value: rawValue === null \? null : -rawValue/);
   assert.match(script, /drawSeries\(borrowPoints, colors\.borrow, \{ stepped: true \}\)/);
   assert.match(script, /`资金费率 \$\{formatRate\(fundingNearest\?\.value\)\}`/);
-  assert.match(script, /`借款利率 \$\{formatRate\(borrowNearest\.value\)\}`/);
+  assert.match(script, /`借款成本 \$\{formatRate\(borrowNearest\.value\)\}（原始利率 \$\{formatRate\(borrowNearest\.rawValue\)\}）`/);
+  assert.match(html, /借款成本（负值）/);
+  assert.match(html, /并作为成本以负值绘制/);
   assert.match(styles, /--borrow:/);
   assert.match(styles, /white-space: pre;/);
 });

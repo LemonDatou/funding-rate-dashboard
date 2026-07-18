@@ -598,7 +598,15 @@ import {
     const minTime = fundingPoints[0].time;
     const maxTime = fundingPoints[fundingPoints.length - 1].time;
     const rawBorrowPoints = (state.history.borrowPoints || [])
-      .map((point) => ({ point, value: borrowRateValue(point), time: finite(point.timestamp) }))
+      .map((point) => {
+        const rawValue = borrowRateValue(point);
+        return {
+          point,
+          rawValue,
+          value: rawValue === null ? null : -rawValue,
+          time: finite(point.timestamp),
+        };
+      })
       .filter((item) => item.value !== null && item.time !== null && item.time <= maxTime)
       .sort((left, right) => left.time - right.time);
     const borrowPoints = [];
@@ -746,7 +754,9 @@ import {
     tooltip.textContent = [
       formatTimestamp(anchor.time),
       `资金费率 ${formatRate(fundingNearest?.value)}`,
-      ...(borrowNearest ? [`借款利率 ${formatRate(borrowNearest.value)}`] : []),
+      ...(borrowNearest ? [
+        `借款成本 ${formatRate(borrowNearest.value)}（原始利率 ${formatRate(borrowNearest.rawValue)}）`,
+      ] : []),
     ].join("\n");
     tooltip.style.left = `${geometry.xFor(anchor.time)}px`;
     tooltip.style.top = `${geometry.yFor(anchor.value)}px`;
