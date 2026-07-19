@@ -80,21 +80,23 @@ test("only the five CORS-capable exchanges are registered", () => {
   assert.equal(normalizedRates(0.0001, 4).rate_8h, 0.0002);
 });
 
-test("Binance asset labels use the official Alpha list without overriding primary types", () => {
+test("Binance asset labels use non-spot assets from the official Alpha list", () => {
   const alphaAssets = binanceAlphaAssets({
     data: [
-      { symbol: "BTW", alphaId: "ALPHA_778", offline: false },
-      { symbol: "AVAAI", alphaId: "ALPHA_42", offline: false },
-      { symbol: "Cheems", cexCoinName: "1000CHEEMS", denomination: 1000, offline: false },
-      { symbol: "REMOVED", alphaId: "ALPHA_1", offline: true },
-      { symbol: "DELISTED", alphaId: "ALPHA_2", fullyDelisted: true },
+      { symbol: "BTW", alphaId: "ALPHA_778", cexStates: 0 },
+      { symbol: "AVAAI", alphaId: "ALPHA_42", cexStates: 0 },
+      { symbol: "Cheems", cexCoinName: "1000CHEEMS", denomination: 1000, cexStates: 0 },
+      { symbol: "SIREN", alphaId: "ALPHA_102", offline: true, cexStates: 0 },
+      { symbol: "DELISTED_ALPHA", fullyDelisted: true, cexStates: 0 },
+      { symbol: "SPOT", cexCoinName: "SPOT", cexStates: 1 },
     ],
   });
   assert.equal(alphaAssets.has("BTW"), true);
   assert.equal(alphaAssets.has("AVAAI"), true);
   assert.equal(alphaAssets.has("1000CHEEMS"), true);
-  assert.equal(alphaAssets.has("REMOVED"), false);
-  assert.equal(alphaAssets.has("DELISTED"), false);
+  assert.equal(alphaAssets.has("SIREN"), true);
+  assert.equal(alphaAssets.has("DELISTED_ALPHA"), true);
+  assert.equal(alphaAssets.has("SPOT"), false);
   assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["AI"] }, alphaAssets.has("AVAAI")), "Alpha");
   assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["Alpha"] }, alphaAssets.has("MISSING")), null);
   assert.equal(binanceAssetLabel({ underlyingType: "COMMODITY" }, true), "大宗商品");

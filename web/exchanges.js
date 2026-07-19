@@ -159,7 +159,7 @@ export function binanceAssetLabel(metadata, isAlpha = false) {
 export function binanceAlphaAssets(payload) {
   const assets = new Set();
   for (const token of rows(payload?.data)) {
-    if (token.offline === true || token.fullyDelisted === true) continue;
+    if (finite(token.cexStates) === 1) continue;
     const denomination = finite(token.denomination);
     const aliases = [token.symbol, token.cexCoinName];
     if (denomination !== null && denomination > 1 && token.symbol) {
