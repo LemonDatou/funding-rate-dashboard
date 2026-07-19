@@ -75,6 +75,7 @@ export async function fetchMarginInterestHistory(
 
 const ALLOWED_HOSTS = new Set([
   "fapi.binance.com",
+  "www.binance.com",
   "www.okx.com",
   "api.bybit.com",
   "api.bitget.com",
@@ -84,9 +85,11 @@ const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const MARKET_CACHE_MS = 30_000;
 const OPEN_INTEREST_CACHE_MS = 120_000;
 const BINANCE_METADATA_CACHE_MS = 10 * 60_000;
+const BINANCE_ALPHA_CACHE_MS = 10 * 60_000;
 const marketCache = new Map();
 const binanceOpenInterestCache = new Map();
 let binanceMetadataCache = null;
+let binanceAlphaCache = null;
 
 const BINANCE_ASSET_LABELS = Object.freeze({
   COMMODITY: "大宗商品",
@@ -147,11 +150,27 @@ function relativePriceChange(current, previous) {
   return (currentPrice - previousPrice) / previousPrice;
 }
 
-export function binanceAssetLabel(metadata) {
+export function binanceAssetLabel(metadata, isAlpha = false) {
   const type = String(metadata?.underlyingType || "");
-  const subtypes = Array.isArray(metadata?.underlyingSubType) ? metadata.underlyingSubType : [];
-  if (type === "COIN") return subtypes.includes("Alpha") ? "Alpha" : null;
+  if (type === "COIN") return isAlpha ? "Alpha" : null;
   return BINANCE_ASSET_LABELS[type] || null;
+}
+
+export function binanceAlphaAssets(payload) {
+  const assets = new Set();
+  for (const token of rows(payload?.data)) {
+    if (token.offline === true || token.fullyDelisted === true) continue;
+    const denomination = finite(token.denomination);
+    const aliases = [token.symbol, token.cexCoinName];
+    if (denomination !== null && denomination > 1 && token.symbol) {
+      aliases.push(`${denomination}${token.symbol}`);
+    }
+    for (const alias of aliases) {
+      const asset = String(alias || "").trim().toUpperCase();
+      if (asset) assets.add(asset);
+    }
+  }
+  return assets;
 }
 
 async function fetchBinanceMetadata(base, signal) {
@@ -164,6 +183,17 @@ async function fetchBinanceMetadata(base, signal) {
   const symbols = new Map(rows(payload?.symbols).map((row) => [String(row.symbol || ""), row]));
   binanceMetadataCache = { symbols, expiresAt: Date.now() + BINANCE_METADATA_CACHE_MS };
   return symbols;
+}
+
+async function fetchBinanceAlphaAssets(signal) {
+  if (binanceAlphaCache?.expiresAt > Date.now()) return binanceAlphaCache.assets;
+  const payload = await fetchJson(
+    "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list",
+    { signal, timeoutMs: 15_000, attempts: 1 },
+  );
+  const assets = binanceAlphaAssets(payload);
+  binanceAlphaCache = { assets, expiresAt: Date.now() + BINANCE_ALPHA_CACHE_MS };
+  return assets;
 }
 
 function futureBoundaryMs(intervalHours) {
@@ -326,6 +356,7 @@ function historyResult(exchange, symbol, intervalHours, pairs, limit) {
 async function fetchBinanceMarkets({ signal, onProgress }) {
   const base = "https://fapi.binance.com";
   const metadataPromise = fetchBinanceMetadata(base, signal).catch(() => new Map());
+  const alphaAssetsPromise = fetchBinanceAlphaAssets(signal).catch(() => new Set());
   const [premium, fundingInfo, tickerPayload] = await Promise.all([
     fetchJson(`${base}/fapi/v1/premiumIndex`, { signal }),
     fetchJson(`${base}/fapi/v1/fundingInfo`, { signal }).catch(() => []),
@@ -368,8 +399,13 @@ async function fetchBinanceMarkets({ signal, onProgress }) {
   markets.sort((left, right) => left.symbol.localeCompare(right.symbol));
   onProgress?.(markets.map((market) => ({ ...market })));
 
-  const enrichMetadata = metadataPromise.then((metadata) => {
-    for (const market of markets) market.asset_label = binanceAssetLabel(metadata.get(market.symbol));
+  const enrichMetadata = Promise.all([metadataPromise, alphaAssetsPromise]).then(([metadata, alphaAssets]) => {
+    for (const market of markets) {
+      market.asset_label = binanceAssetLabel(
+        metadata.get(market.symbol),
+        alphaAssets.has(String(market.base_asset || "").toUpperCase()),
+      );
+    }
     onProgress?.(markets.map((market) => ({ ...market })));
   });
   await enrichMetadata;
@@ -760,4 +796,5 @@ export function clearCachesForTests() {
   marketCache.clear();
   binanceOpenInterestCache.clear();
   binanceMetadataCache = null;
+  binanceAlphaCache = null;
 }

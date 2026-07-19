@@ -134,4 +134,5 @@ test("launcher only serves static files", async () => {
   assert.match(launcher, /-m http\.server/);
   assert.doesNotMatch(launcher, /uvicorn|FastAPI/);
   assert.match(nginx, /connect-src 'self' https:\/\/fapi\.binance\.com/);
+  assert.match(nginx, /https:\/\/www\.binance\.com/);
 });

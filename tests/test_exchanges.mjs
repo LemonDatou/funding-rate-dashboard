@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   EXCHANGES,
+  binanceAlphaAssets,
   binanceAssetLabel,
   clearCachesForTests,
   fetchJson,
@@ -33,6 +34,10 @@ function installFixtureFetch() {
       if (url.pathname.endsWith("exchangeInfo")) return json({ symbols: [{ symbol: "BTCUSDT", underlyingType: "COIN", underlyingSubType: ["PoW"] }] });
       if (url.pathname.endsWith("openInterest")) return json({ openInterest: "10" });
       if (url.pathname.endsWith("fundingRate")) return json([{ fundingTime: 1_999_000_000_000, fundingRate: "0.0001" }]);
+    }
+
+    if (url.hostname === "www.binance.com") {
+      return json({ data: [{ symbol: "AVAAI", alphaId: "ALPHA_42", offline: false }] });
     }
 
     if (url.hostname === "www.okx.com") {
@@ -75,11 +80,25 @@ test("only the five CORS-capable exchanges are registered", () => {
   assert.equal(normalizedRates(0.0001, 4).rate_8h, 0.0002);
 });
 
-test("Binance asset labels use primary type with Alpha as the only COIN exception", () => {
-  assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["Alpha", "AI"] }), "Alpha");
-  assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["Meme"] }), null);
-  assert.equal(binanceAssetLabel({ underlyingType: "COMMODITY" }), "大宗商品");
-  assert.equal(binanceAssetLabel({ underlyingType: "EQUITY" }), "股票/ETF");
+test("Binance asset labels use the official Alpha list without overriding primary types", () => {
+  const alphaAssets = binanceAlphaAssets({
+    data: [
+      { symbol: "BTW", alphaId: "ALPHA_778", offline: false },
+      { symbol: "AVAAI", alphaId: "ALPHA_42", offline: false },
+      { symbol: "Cheems", cexCoinName: "1000CHEEMS", denomination: 1000, offline: false },
+      { symbol: "REMOVED", alphaId: "ALPHA_1", offline: true },
+      { symbol: "DELISTED", alphaId: "ALPHA_2", fullyDelisted: true },
+    ],
+  });
+  assert.equal(alphaAssets.has("BTW"), true);
+  assert.equal(alphaAssets.has("AVAAI"), true);
+  assert.equal(alphaAssets.has("1000CHEEMS"), true);
+  assert.equal(alphaAssets.has("REMOVED"), false);
+  assert.equal(alphaAssets.has("DELISTED"), false);
+  assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["AI"] }, alphaAssets.has("AVAAI")), "Alpha");
+  assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["Alpha"] }, alphaAssets.has("MISSING")), null);
+  assert.equal(binanceAssetLabel({ underlyingType: "COMMODITY" }, true), "大宗商品");
+  assert.equal(binanceAssetLabel({ underlyingType: "EQUITY" }, true), "股票/ETF");
   assert.equal(binanceAssetLabel({ underlyingType: "HK_EQUITY" }), "港股");
   assert.equal(binanceAssetLabel({ underlyingType: "KR_EQUITY" }), "韩股");
   assert.equal(binanceAssetLabel({ underlyingType: "INDEX" }), "指数");
@@ -180,6 +199,7 @@ test("Binance loads open interest only for the clicked symbol and caches it", as
   const symbols = Array.from({ length: 20 }, (_, index) => `C${index}USDT`);
   globalThis.fetch = async (rawUrl) => {
     const url = new URL(rawUrl);
+    if (url.hostname === "www.binance.com") return json({ data: [] });
     if (url.pathname.endsWith("premiumIndex")) return json(symbols.map((symbol) => ({ symbol, lastFundingRate: "0.0001", markPrice: "10", nextFundingTime: 2_000_000_000_000 })));
     if (url.pathname.endsWith("fundingInfo")) return json([]);
     if (url.pathname.endsWith("ticker/24hr")) return json(symbols.map((symbol) => ({ symbol, quoteVolume: "2000000" })));
