@@ -13,7 +13,7 @@ test("page defaults to Binance and no longer exposes Gate", async () => {
     assert.doesNotMatch(html, new RegExp(`value="${exchange}" checked`));
   }
   assert.doesNotMatch(html, /value="gate"|>Gate</);
-  assert.match(html, /type="module" src="\.\/app\.js"/);
+  assert.match(html, /type="module" src="\.\/app\.js\?v=[^"]+"/);
   assert.match(html, /id="toast"/);
   assert.match(html, />LemonDatou</);
   assert.match(html, /class="brand-link" href="\/margin-pool\/"/);
@@ -36,6 +36,11 @@ test("frontend loads exchanges on demand without aggregate endpoints", async () 
   assert.match(script, /input\.disabled = true/);
   assert.match(script, /showToast\(/);
   assert.doesNotMatch(script, /\/api\/markets|\/api\/history/);
+
+  const appVersion = html.match(/src="\.\/app\.js\?v=([^"]+)"/)?.[1];
+  const exchangeVersion = script.match(/from "\.\/exchanges\.js\?v=([^"]+)"/)?.[1];
+  assert.ok(appVersion);
+  assert.equal(exchangeVersion, appVersion);
 });
 
 test("latest price is followed by sortable spot and contract volume columns", async () => {
@@ -142,4 +147,5 @@ test("launcher only serves static files", async () => {
   assert.match(nginx, /connect-src 'self' https:\/\/fapi\.binance\.com/);
   assert.match(nginx, /https:\/\/www\.binance\.com/);
   assert.match(nginx, /https:\/\/data-api\.binance\.vision/);
+  assert.match(nginx, /Cache-Control "no-cache, must-revalidate"/);
 });

@@ -6,7 +6,7 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js";
+} from "./exchanges.js?v=20260720a";
 
 (() => {
   "use strict";
