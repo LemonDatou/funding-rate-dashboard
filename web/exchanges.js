@@ -15,6 +15,7 @@ export const EXCHANGE_LABELS = Object.freeze({
 });
 
 const BINANCE_CONTRACT_MULTIPLIER = /^(?:1000000|1000)(?=.+$)/;
+const BINANCE_SPOT_QUOTES = Object.freeze(["USDT", "USDC", "FDUSD"]);
 
 export function marginPoolSearch(market) {
   if (!market || market.exchange !== "binance" || market.asset_label) return null;
@@ -75,6 +76,7 @@ export async function fetchMarginInterestHistory(
 
 const ALLOWED_HOSTS = new Set([
   "fapi.binance.com",
+  "data-api.binance.vision",
   "www.binance.com",
   "www.okx.com",
   "api.bybit.com",
@@ -156,21 +158,57 @@ export function binanceAssetLabel(metadata, isAlpha = false) {
   return BINANCE_ASSET_LABELS[type] || null;
 }
 
-export function binanceAlphaAssets(payload) {
-  const assets = new Set();
-  for (const token of rows(payload?.data)) {
+function binanceAlphaAliases(token) {
+  const aliases = [token.symbol, token.cexCoinName];
+  const denomination = finite(token.denomination);
+  if (denomination !== null && denomination > 1 && token.symbol) {
+    aliases.push(`${denomination}${token.symbol}`);
+  }
+  return [...new Set(aliases
+    .map((alias) => String(alias || "").trim().toUpperCase())
+    .filter(Boolean))];
+}
+
+export function binanceAlphaTokens(payload) {
+  const tokens = new Map();
+  const list = rows(payload?.data);
+  const spotAssets = new Set(list
+    .filter((token) => finite(token.cexStates) === 1)
+    .flatMap(binanceAlphaAliases));
+  for (const token of list) {
     if (finite(token.cexStates) === 1) continue;
-    const denomination = finite(token.denomination);
-    const aliases = [token.symbol, token.cexCoinName];
-    if (denomination !== null && denomination > 1 && token.symbol) {
-      aliases.push(`${denomination}${token.symbol}`);
-    }
-    for (const alias of aliases) {
-      const asset = String(alias || "").trim().toUpperCase();
-      if (asset) assets.add(asset);
+    const volume = finite(token.volume24h);
+    for (const asset of binanceAlphaAliases(token)) {
+      if (spotAssets.has(asset)) continue;
+      const previous = tokens.get(asset)?.volume_24h_usd ?? null;
+      tokens.set(asset, {
+        volume_24h_usd: volume === null ? previous : (previous ?? 0) + volume,
+      });
     }
   }
-  return assets;
+  return tokens;
+}
+
+export function binanceAlphaAssets(payload) {
+  return new Set(binanceAlphaTokens(payload).keys());
+}
+
+export function binanceSpotVolume(baseAsset, tickers) {
+  const contractAsset = String(baseAsset || "").trim().toUpperCase();
+  if (!contractAsset || typeof tickers?.get !== "function") return null;
+  const normalizedAsset = contractAsset.replace(BINANCE_CONTRACT_MULTIPLIER, "") || contractAsset;
+  for (const asset of new Set([contractAsset, normalizedAsset])) {
+    let volume = 0;
+    let matched = false;
+    for (const quote of BINANCE_SPOT_QUOTES) {
+      const quoteVolume = finite(tickers.get(`${asset}${quote}`)?.quoteVolume);
+      if (quoteVolume === null) continue;
+      volume += quoteVolume;
+      matched = true;
+    }
+    if (matched) return volume;
+  }
+  return null;
 }
 
 async function fetchBinanceMetadata(base, signal) {
@@ -185,15 +223,15 @@ async function fetchBinanceMetadata(base, signal) {
   return symbols;
 }
 
-async function fetchBinanceAlphaAssets(signal) {
-  if (binanceAlphaCache?.expiresAt > Date.now()) return binanceAlphaCache.assets;
+async function fetchBinanceAlphaTokens(signal) {
+  if (binanceAlphaCache?.expiresAt > Date.now()) return binanceAlphaCache.tokens;
   const payload = await fetchJson(
     "https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list",
     { signal, timeoutMs: 15_000, attempts: 1 },
   );
-  const assets = binanceAlphaAssets(payload);
-  binanceAlphaCache = { assets, expiresAt: Date.now() + BINANCE_ALPHA_CACHE_MS };
-  return assets;
+  const tokens = binanceAlphaTokens(payload);
+  binanceAlphaCache = { tokens, expiresAt: Date.now() + BINANCE_ALPHA_CACHE_MS };
+  return tokens;
 }
 
 function futureBoundaryMs(intervalHours) {
@@ -295,6 +333,7 @@ function makeMarket(exchange, {
   priceChange24h = null,
   openInterestUsd = null,
   volume24hUsd = null,
+  spotVolume24hUsd = null,
   nextFundingTime = null,
   updatedAt = null,
   nextFundingRate = null,
@@ -321,6 +360,7 @@ function makeMarket(exchange, {
     price_change_24h: finite(priceChange24h),
     open_interest_usd: finite(openInterestUsd),
     volume_24h_usd: finite(volume24hUsd),
+    spot_volume_24h_usd: finite(spotVolume24hUsd),
     next_funding_time: typeof nextFundingTime === "string" && nextFundingTime.endsWith("Z")
       ? nextFundingTime
       : timestampIso(nextFundingTime, timestampSeconds),
@@ -356,7 +396,12 @@ function historyResult(exchange, symbol, intervalHours, pairs, limit) {
 async function fetchBinanceMarkets({ signal, onProgress }) {
   const base = "https://fapi.binance.com";
   const metadataPromise = fetchBinanceMetadata(base, signal).catch(() => new Map());
-  const alphaAssetsPromise = fetchBinanceAlphaAssets(signal).catch(() => new Set());
+  const alphaTokensPromise = fetchBinanceAlphaTokens(signal).catch(() => new Map());
+  const spotTickersPromise = fetchJson(
+    "https://data-api.binance.vision/api/v3/ticker/24hr",
+    { params: { type: "MINI" }, signal, timeoutMs: 15_000, attempts: 1 },
+  ).then((payload) => new Map(rows(payload).map((row) => [String(row.symbol || ""), row])))
+    .catch(() => new Map());
   const [premium, fundingInfo, tickerPayload] = await Promise.all([
     fetchJson(`${base}/fapi/v1/premiumIndex`, { signal }),
     fetchJson(`${base}/fapi/v1/fundingInfo`, { signal }).catch(() => []),
@@ -399,15 +444,23 @@ async function fetchBinanceMarkets({ signal, onProgress }) {
   markets.sort((left, right) => left.symbol.localeCompare(right.symbol));
   onProgress?.(markets.map((market) => ({ ...market })));
 
-  const enrichMetadata = Promise.all([metadataPromise, alphaAssetsPromise]).then(([metadata, alphaAssets]) => {
-    for (const market of markets) {
-      market.asset_label = binanceAssetLabel(
-        metadata.get(market.symbol),
-        alphaAssets.has(String(market.base_asset || "").toUpperCase()),
-      );
-    }
-    onProgress?.(markets.map((market) => ({ ...market })));
-  });
+  const enrichMetadata = Promise.all([metadataPromise, alphaTokensPromise, spotTickersPromise])
+    .then(([metadata, alphaTokens, spotTickers]) => {
+      for (const market of markets) {
+        const details = metadata.get(market.symbol);
+        const alphaToken = alphaTokens.get(String(market.base_asset || "").toUpperCase());
+        market.asset_label = binanceAssetLabel(
+          details,
+          Boolean(alphaToken),
+        );
+        if (String(details?.underlyingType || "") === "COIN") {
+          market.spot_volume_24h_usd = alphaToken
+            ? alphaToken.volume_24h_usd
+            : binanceSpotVolume(market.base_asset, spotTickers);
+        }
+      }
+      onProgress?.(markets.map((market) => ({ ...market })));
+    });
   await enrichMetadata;
   return markets;
 }

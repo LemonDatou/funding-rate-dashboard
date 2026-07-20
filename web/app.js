@@ -366,6 +366,7 @@ import {
         cell(fundingBounds(market), "numeric"),
         intervalCell,
         latestPriceCell(market),
+        cell(formatMoney(market.spot_volume_24h_usd), "numeric"),
         cell(formatMoney(market.volume_24h_usd), "numeric"),
         openInterestCell(market),
       );

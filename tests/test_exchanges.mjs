@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   EXCHANGES,
   binanceAlphaAssets,
+  binanceAlphaTokens,
   binanceAssetLabel,
+  binanceSpotVolume,
   clearCachesForTests,
   fetchJson,
   fetchHistory,
@@ -38,6 +40,13 @@ function installFixtureFetch() {
 
     if (url.hostname === "www.binance.com") {
       return json({ data: [{ symbol: "AVAAI", alphaId: "ALPHA_42", offline: false }] });
+    }
+
+    if (url.hostname === "data-api.binance.vision") {
+      return json([
+        { symbol: "BTCUSDT", quoteVolume: "3000000" },
+        { symbol: "BTCUSDC", quoteVolume: "1000000" },
+      ]);
     }
 
     if (url.hostname === "www.okx.com") {
@@ -84,11 +93,14 @@ test("Binance asset labels use non-spot assets from the official Alpha list", ()
   const alphaAssets = binanceAlphaAssets({
     data: [
       { symbol: "BTW", alphaId: "ALPHA_778", cexStates: 0 },
-      { symbol: "AVAAI", alphaId: "ALPHA_42", cexStates: 0 },
+      { symbol: "AVAAI", alphaId: "ALPHA_42", cexStates: 0, volume24h: "3040205.25" },
       { symbol: "Cheems", cexCoinName: "1000CHEEMS", denomination: 1000, cexStates: 0 },
       { symbol: "SIREN", alphaId: "ALPHA_102", offline: true, cexStates: 0 },
+      { symbol: "AVAAI", alphaId: "ALPHA_43", cexStates: 0, volume24h: "100" },
       { symbol: "DELISTED_ALPHA", fullyDelisted: true, cexStates: 0 },
       { symbol: "SPOT", cexCoinName: "SPOT", cexStates: 1 },
+      { symbol: "MIXED", cexStates: 0 },
+      { symbol: "MIXED", cexStates: 1 },
     ],
   });
   assert.equal(alphaAssets.has("BTW"), true);
@@ -97,6 +109,13 @@ test("Binance asset labels use non-spot assets from the official Alpha list", ()
   assert.equal(alphaAssets.has("SIREN"), true);
   assert.equal(alphaAssets.has("DELISTED_ALPHA"), true);
   assert.equal(alphaAssets.has("SPOT"), false);
+  assert.equal(alphaAssets.has("MIXED"), false);
+  assert.equal(binanceAlphaTokens({
+    data: [
+      { symbol: "AVAAI", cexStates: 0, volume24h: "3040205.25" },
+      { symbol: "AVAAI", cexStates: 0, volume24h: "100" },
+    ],
+  }).get("AVAAI").volume_24h_usd, 3040305.25);
   assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["AI"] }, alphaAssets.has("AVAAI")), "Alpha");
   assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["Alpha"] }, alphaAssets.has("MISSING")), null);
   assert.equal(binanceAssetLabel({ underlyingType: "COMMODITY" }, true), "大宗商品");
@@ -105,6 +124,21 @@ test("Binance asset labels use non-spot assets from the official Alpha list", ()
   assert.equal(binanceAssetLabel({ underlyingType: "KR_EQUITY" }), "韩股");
   assert.equal(binanceAssetLabel({ underlyingType: "INDEX" }), "指数");
   assert.equal(binanceAssetLabel({ underlyingType: "PREMARKET", underlyingSubType: ["TradFi", "Pre-IPO"] }), "盘前");
+});
+
+test("Binance spot volume sums USD stablecoin pairs and handles contract multipliers", () => {
+  const tickers = new Map([
+    ["BTCUSDT", { quoteVolume: "300" }],
+    ["BTCUSDC", { quoteVolume: "100" }],
+    ["BTCFDUSD", { quoteVolume: "50" }],
+    ["BONKUSDT", { quoteVolume: "200" }],
+    ["1000SATSUSDT", { quoteVolume: "80" }],
+    ["SATSUSDT", { quoteVolume: "20" }],
+  ]);
+  assert.equal(binanceSpotVolume("BTC", tickers), 450);
+  assert.equal(binanceSpotVolume("1000BONK", tickers), 200);
+  assert.equal(binanceSpotVolume("1000SATS", tickers), 80);
+  assert.equal(binanceSpotVolume("MISSING", tickers), null);
 });
 
 test("only unlabelled Binance spot-like contracts link to normalized margin assets", () => {
@@ -191,6 +225,7 @@ test("all five adapters map current markets and public history", async () => {
       assert.equal(markets[0].last_price, 694.61);
       assert.equal(markets[0].price_change_24h, 0.1099);
       assert.equal(markets[0].open_interest_usd, null);
+      assert.equal(markets[0].spot_volume_24h_usd, 4000000);
       assert.equal(await fetchOpenInterest("binance", markets[0].symbol, markets[0].mark_price), 600000);
     }
   }
@@ -202,6 +237,7 @@ test("Binance loads open interest only for the clicked symbol and caches it", as
   globalThis.fetch = async (rawUrl) => {
     const url = new URL(rawUrl);
     if (url.hostname === "www.binance.com") return json({ data: [] });
+    if (url.hostname === "data-api.binance.vision") return json([]);
     if (url.pathname.endsWith("premiumIndex")) return json(symbols.map((symbol) => ({ symbol, lastFundingRate: "0.0001", markPrice: "10", nextFundingTime: 2_000_000_000_000 })));
     if (url.pathname.endsWith("fundingInfo")) return json([]);
     if (url.pathname.endsWith("ticker/24hr")) return json(symbols.map((symbol) => ({ symbol, quoteVolume: "2000000" })));

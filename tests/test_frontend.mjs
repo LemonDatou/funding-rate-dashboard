@@ -38,19 +38,25 @@ test("frontend loads exchanges on demand without aggregate endpoints", async () 
   assert.doesNotMatch(script, /\/api\/markets|\/api\/history/);
 });
 
-test("latest price sorts by 24h change before the final activity columns", async () => {
+test("latest price is followed by sortable spot and contract volume columns", async () => {
   const html = await readFile(new URL("index.html", staticDir), "utf8");
   const script = await readFile(new URL("app.js", staticDir), "utf8");
-  const volumeHeading = html.indexOf('data-sort="volume_24h_usd"');
+  const spotVolumeHeading = html.indexOf('data-sort="spot_volume_24h_usd"');
+  const contractVolumeHeading = html.indexOf('data-sort="volume_24h_usd"');
   const openInterestHeading = html.indexOf('data-sort="open_interest_usd"');
   const priceHeading = html.indexOf('data-sort="price_change_24h"');
 
   assert.ok(priceHeading > html.indexOf('data-sort="interval_hours"'));
-  assert.ok(volumeHeading > priceHeading);
-  assert.ok(openInterestHeading > volumeHeading);
+  assert.ok(spotVolumeHeading > priceHeading);
+  assert.ok(contractVolumeHeading > spotVolumeHeading);
+  assert.ok(openInterestHeading > contractVolumeHeading);
+  assert.match(html, /合约成交额 ≥/);
+  assert.match(html, />现货成交额 <span>/);
+  assert.match(html, />合约成交额 <span>/);
+  assert.match(html, /colspan="10"/);
   assert.match(
     script,
-    /intervalCell,\s*latestPriceCell\(market\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
+    /intervalCell,\s*latestPriceCell\(market\),\s*cell\(formatMoney\(market\.spot_volume_24h_usd\), "numeric"\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
   );
   assert.match(script, /formatPrice\(market\.last_price\).*formatPriceChange\(market\.price_change_24h\)/s);
   assert.match(script, /number\.toExponential\(3\)/);
@@ -135,4 +141,5 @@ test("launcher only serves static files", async () => {
   assert.doesNotMatch(launcher, /uvicorn|FastAPI/);
   assert.match(nginx, /connect-src 'self' https:\/\/fapi\.binance\.com/);
   assert.match(nginx, /https:\/\/www\.binance\.com/);
+  assert.match(nginx, /https:\/\/data-api\.binance\.vision/);
 });
