@@ -24,10 +24,13 @@ const json = (payload, status = 200) => new Response(JSON.stringify(payload), {
   headers: { "Content-Type": "application/json" },
 });
 
-function installFixtureFetch() {
+function installFixtureFetch({ failPrimarySpot = false, onRequest } = {}) {
+  const requests = [];
   globalThis.fetch = async (rawUrl, options = {}) => {
     const url = new URL(rawUrl);
     const body = options.body ? JSON.parse(options.body) : null;
+    requests.push(url.href);
+    onRequest?.(url);
 
     if (url.hostname === "fapi.binance.com") {
       if (url.pathname.endsWith("premiumIndex")) return json([{ symbol: "BTCUSDT", lastFundingRate: "0.0001", markPrice: "60000", nextFundingTime: 2_000_000_000_000, time: 1_999_000_000_000 }]);
@@ -40,6 +43,14 @@ function installFixtureFetch() {
 
     if (url.hostname === "www.binance.com") {
       return json({ data: [{ symbol: "AVAAI", alphaId: "ALPHA_42", offline: false }] });
+    }
+
+    if (url.hostname === "api.binance.com") {
+      if (failPrimarySpot) return json({ error: true }, 503);
+      return json([
+        { symbol: "BTCUSDT", quoteVolume: "3000000" },
+        { symbol: "BTCUSDC", quoteVolume: "1000000" },
+      ]);
     }
 
     if (url.hostname === "data-api.binance.vision") {
@@ -77,6 +88,7 @@ function installFixtureFetch() {
 
     throw new Error(`Unexpected request: ${url} ${JSON.stringify(body)}`);
   };
+  return requests;
 }
 
 test.afterEach(() => {
@@ -208,10 +220,18 @@ test("Margin Pool interest history is loaded from the same-origin read-only API"
 });
 
 test("all five adapters map current markets and public history", async () => {
-  installFixtureFetch();
+  const events = [];
+  const requests = installFixtureFetch({
+    onRequest: (url) => events.push(`request:${url.hostname}${url.pathname}`),
+  });
   for (const exchange of EXCHANGES) {
     const progress = [];
-    const markets = await fetchMarkets(exchange, { onProgress: (items) => progress.push(items) });
+    const markets = await fetchMarkets(exchange, {
+      onProgress: (items) => {
+        progress.push(items);
+        if (exchange === "binance") events.push("progress:binance");
+      },
+    });
     assert.equal(markets.length, 1, `${exchange} current market`);
     assert.equal(markets[0].exchange, exchange);
     assert.ok(markets[0].funding_rate_8h !== null);
@@ -221,14 +241,35 @@ test("all five adapters map current markets and public history", async () => {
     assert.equal(history.exchange, exchange);
     assert.equal(history.points.length, 1, `${exchange} history`);
     if (exchange === "binance") {
-      assert.ok(progress.length >= 2, "Binance should render before and after metadata enrichment");
+      assert.ok(progress.length >= 3, "Binance should render contract data, metadata, then spot volume");
+      assert.equal(progress[0][0].spot_volume_pending, true);
+      assert.equal(progress[1][0].spot_volume_pending, true);
+      assert.equal(progress.at(-1)[0].spot_volume_pending, false);
       assert.equal(markets[0].last_price, 694.61);
       assert.equal(markets[0].price_change_24h, 0.1099);
       assert.equal(markets[0].open_interest_usd, null);
       assert.equal(markets[0].spot_volume_24h_usd, 4000000);
+      assert.equal(markets[0].spot_volume_pending, false);
+      const spotRequest = new URL(requests.find((url) => url.startsWith("https://api.binance.com/api/v3/ticker/24hr")));
+      assert.equal(spotRequest.searchParams.get("type"), "MINI");
+      assert.equal(spotRequest.searchParams.get("symbolStatus"), "TRADING");
+      const spotRequestIndex = events.indexOf("request:api.binance.com/api/v3/ticker/24hr");
+      const progressIndexes = events
+        .map((event, index) => event === "progress:binance" ? index : -1)
+        .filter((index) => index >= 0);
+      assert.ok(spotRequestIndex > progressIndexes[1], "Spot request should start after metadata progress");
+      assert.equal(requests.filter((url) => url.endsWith("/fapi/v1/fundingInfo")).length, 1);
       assert.equal(await fetchOpenInterest("binance", markets[0].symbol, markets[0].mark_price), 600000);
     }
   }
+});
+
+test("Binance spot tickers fall back to the market-data host", async () => {
+  const requests = installFixtureFetch({ failPrimarySpot: true });
+  const markets = await fetchMarkets("binance");
+  assert.equal(markets[0].spot_volume_24h_usd, 4000000);
+  assert.ok(requests.some((url) => url.startsWith("https://api.binance.com/api/v3/ticker/24hr")));
+  assert.ok(requests.some((url) => url.startsWith("https://data-api.binance.vision/api/v3/ticker/24hr")));
 });
 
 test("Binance loads open interest only for the clicked symbol and caches it", async () => {
@@ -237,7 +278,7 @@ test("Binance loads open interest only for the clicked symbol and caches it", as
   globalThis.fetch = async (rawUrl) => {
     const url = new URL(rawUrl);
     if (url.hostname === "www.binance.com") return json({ data: [] });
-    if (url.hostname === "data-api.binance.vision") return json([]);
+    if (url.hostname === "api.binance.com" || url.hostname === "data-api.binance.vision") return json([]);
     if (url.pathname.endsWith("premiumIndex")) return json(symbols.map((symbol) => ({ symbol, lastFundingRate: "0.0001", markPrice: "10", nextFundingTime: 2_000_000_000_000 })));
     if (url.pathname.endsWith("fundingInfo")) return json([]);
     if (url.pathname.endsWith("ticker/24hr")) return json(symbols.map((symbol) => ({ symbol, quoteVolume: "2000000" })));

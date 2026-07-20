@@ -76,6 +76,7 @@ export async function fetchMarginInterestHistory(
 
 const ALLOWED_HOSTS = new Set([
   "fapi.binance.com",
+  "api.binance.com",
   "data-api.binance.vision",
   "www.binance.com",
   "www.okx.com",
@@ -86,12 +87,14 @@ const ALLOWED_HOSTS = new Set([
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const MARKET_CACHE_MS = 30_000;
 const OPEN_INTEREST_CACHE_MS = 120_000;
+const BINANCE_FUNDING_INFO_CACHE_MS = 10 * 60_000;
 const BINANCE_METADATA_CACHE_MS = 10 * 60_000;
 const BINANCE_ALPHA_CACHE_MS = 10 * 60_000;
 const marketCache = new Map();
 const binanceOpenInterestCache = new Map();
 let binanceMetadataCache = null;
 let binanceAlphaCache = null;
+let binanceFundingInfoCache = null;
 
 const BINANCE_ASSET_LABELS = Object.freeze({
   COMMODITY: "大宗商品",
@@ -155,6 +158,7 @@ function relativePriceChange(current, previous) {
 export function binanceAssetLabel(metadata, isAlpha = false) {
   const type = String(metadata?.underlyingType || "");
   if (type === "COIN") return isAlpha ? "Alpha" : null;
+  if (!type && isAlpha) return "Alpha";
   return BINANCE_ASSET_LABELS[type] || null;
 }
 
@@ -223,6 +227,18 @@ async function fetchBinanceMetadata(base, signal) {
   return symbols;
 }
 
+async function fetchBinanceFundingInfo(base, signal) {
+  if (binanceFundingInfoCache?.expiresAt > Date.now()) return binanceFundingInfoCache.symbols;
+  const payload = await fetchJson(`${base}/fapi/v1/fundingInfo`, {
+    signal,
+    timeoutMs: 15_000,
+    attempts: 1,
+  });
+  const symbols = new Map(rows(payload).map((row) => [String(row.symbol || ""), row]));
+  binanceFundingInfoCache = { symbols, expiresAt: Date.now() + BINANCE_FUNDING_INFO_CACHE_MS };
+  return symbols;
+}
+
 async function fetchBinanceAlphaTokens(signal) {
   if (binanceAlphaCache?.expiresAt > Date.now()) return binanceAlphaCache.tokens;
   const payload = await fetchJson(
@@ -232,6 +248,30 @@ async function fetchBinanceAlphaTokens(signal) {
   const tokens = binanceAlphaTokens(payload);
   binanceAlphaCache = { tokens, expiresAt: Date.now() + BINANCE_ALPHA_CACHE_MS };
   return tokens;
+}
+
+async function fetchBinanceSpotTickers(signal) {
+  const params = { type: "MINI", symbolStatus: "TRADING" };
+  const endpoints = [
+    ["https://api.binance.com/api/v3/ticker/24hr", 10_000],
+    ["https://data-api.binance.vision/api/v3/ticker/24hr", 30_000],
+  ];
+  let lastError;
+  for (const [endpoint, timeoutMs] of endpoints) {
+    try {
+      const payload = await fetchJson(endpoint, {
+        params,
+        signal,
+        timeoutMs,
+        attempts: 1,
+      });
+      return new Map(rows(payload).map((row) => [String(row.symbol || ""), row]));
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      lastError = error;
+    }
+  }
+  throw lastError ?? new ExchangeError("Binance 现货行情请求失败");
 }
 
 function futureBoundaryMs(intervalHours) {
@@ -334,6 +374,7 @@ function makeMarket(exchange, {
   openInterestUsd = null,
   volume24hUsd = null,
   spotVolume24hUsd = null,
+  spotVolumePending = false,
   nextFundingTime = null,
   updatedAt = null,
   nextFundingRate = null,
@@ -361,6 +402,7 @@ function makeMarket(exchange, {
     open_interest_usd: finite(openInterestUsd),
     volume_24h_usd: finite(volume24hUsd),
     spot_volume_24h_usd: finite(spotVolume24hUsd),
+    spot_volume_pending: Boolean(spotVolumePending),
     next_funding_time: typeof nextFundingTime === "string" && nextFundingTime.endsWith("Z")
       ? nextFundingTime
       : timestampIso(nextFundingTime, timestampSeconds),
@@ -396,20 +438,15 @@ function historyResult(exchange, symbol, intervalHours, pairs, limit) {
 async function fetchBinanceMarkets({ signal, onProgress }) {
   const base = "https://fapi.binance.com";
   const metadataPromise = fetchBinanceMetadata(base, signal).catch(() => new Map());
+  const fundingInfoPromise = fetchBinanceFundingInfo(base, signal).catch(() => new Map());
   const alphaTokensPromise = fetchBinanceAlphaTokens(signal).catch(() => new Map());
-  const spotTickersPromise = fetchJson(
-    "https://data-api.binance.vision/api/v3/ticker/24hr",
-    { params: { type: "MINI" }, signal, timeoutMs: 15_000, attempts: 1 },
-  ).then((payload) => new Map(rows(payload).map((row) => [String(row.symbol || ""), row])))
-    .catch(() => new Map());
-  const [premium, fundingInfo, tickerPayload] = await Promise.all([
+  const [premium, info, tickerPayload] = await Promise.all([
     fetchJson(`${base}/fapi/v1/premiumIndex`, { signal }),
-    fetchJson(`${base}/fapi/v1/fundingInfo`, { signal }).catch(() => []),
+    fundingInfoPromise,
     fetchJson(`${base}/fapi/v1/ticker/24hr`, { signal }).catch(() => []),
   ]);
   const premiumRows = rows(premium);
   if (!premiumRows.length) throw new ExchangeError("Binance 未返回资金费率市场");
-  const info = new Map(rows(fundingInfo).map((row) => [String(row.symbol || ""), row]));
   const tickers = new Map(rows(tickerPayload).map((row) => [String(row.symbol || ""), row]));
   const now = Date.now();
   const markets = [];
@@ -431,6 +468,7 @@ async function fetchBinanceMarkets({ signal, onProgress }) {
         priceChange24h: finite(ticker.priceChangePercent) === null ? null : finite(ticker.priceChangePercent) / 100,
         openInterestUsd: cachedOi?.expiresAt > now ? cachedOi.value : null,
         volume24hUsd: ticker.quoteVolume,
+        spotVolumePending: true,
         nextFundingTime: row.nextFundingTime,
         updatedAt: row.time,
         fundingCap: details.adjustedFundingRateCap,
@@ -444,24 +482,33 @@ async function fetchBinanceMarkets({ signal, onProgress }) {
   markets.sort((left, right) => left.symbol.localeCompare(right.symbol));
   onProgress?.(markets.map((market) => ({ ...market })));
 
-  const enrichMetadata = Promise.all([metadataPromise, alphaTokensPromise, spotTickersPromise])
-    .then(([metadata, alphaTokens, spotTickers]) => {
-      for (const market of markets) {
-        const details = metadata.get(market.symbol);
-        const alphaToken = alphaTokens.get(String(market.base_asset || "").toUpperCase());
-        market.asset_label = binanceAssetLabel(
-          details,
-          Boolean(alphaToken),
-        );
-        if (String(details?.underlyingType || "") === "COIN") {
-          market.spot_volume_24h_usd = alphaToken
-            ? alphaToken.volume_24h_usd
-            : binanceSpotVolume(market.base_asset, spotTickers);
-        }
-      }
-      onProgress?.(markets.map((market) => ({ ...market })));
-    });
-  await enrichMetadata;
+  const [metadata, alphaTokens] = await Promise.all([metadataPromise, alphaTokensPromise]);
+  for (const market of markets) {
+    const details = metadata.get(market.symbol);
+    const alphaToken = alphaTokens.get(String(market.base_asset || "").toUpperCase());
+    market.asset_label = binanceAssetLabel(details, Boolean(alphaToken));
+    const underlyingType = String(details?.underlyingType || "");
+    if (alphaToken && (underlyingType === "COIN" || !underlyingType)) {
+      market.spot_volume_24h_usd = alphaToken.volume_24h_usd;
+      market.spot_volume_pending = false;
+    } else if (underlyingType && underlyingType !== "COIN") {
+      market.spot_volume_pending = false;
+    }
+  }
+  onProgress?.(markets.map((market) => ({ ...market })));
+
+  const spotTickers = await fetchBinanceSpotTickers(signal).catch(() => new Map());
+  for (const market of markets) {
+    if (!market.spot_volume_pending) continue;
+    const details = metadata.get(market.symbol);
+    const underlyingType = String(details?.underlyingType || "");
+    const spotVolume = binanceSpotVolume(market.base_asset, spotTickers);
+    if (underlyingType === "COIN" || (!underlyingType && spotVolume !== null)) {
+      market.spot_volume_24h_usd = spotVolume;
+    }
+    market.spot_volume_pending = false;
+  }
+  onProgress?.(markets.map((market) => ({ ...market })));
   return markets;
 }
 
@@ -490,13 +537,13 @@ export async function fetchOpenInterest(exchange, symbol, markPrice, { signal, f
 async function fetchBinanceHistory(symbol, limit, signal) {
   const base = "https://fapi.binance.com";
   const [fundingInfo, payload] = await Promise.all([
-    fetchJson(`${base}/fapi/v1/fundingInfo`, { signal }).catch(() => []),
+    fetchBinanceFundingInfo(base, signal).catch(() => new Map()),
     fetchJson(`${base}/fapi/v1/fundingRate`, {
       params: { symbol: symbol.toUpperCase().trim(), limit: Math.min(limit, 1000) },
       signal,
     }),
   ]);
-  const info = rows(fundingInfo).find((row) => row.symbol === symbol.toUpperCase().trim());
+  const info = fundingInfo.get(symbol.toUpperCase().trim());
   const interval = finite(info?.fundingIntervalHours) || 8;
   return historyResult("binance", symbol.toUpperCase().trim(), interval, rows(payload).map((row) => [row.fundingTime, row.fundingRate]), limit);
 }
@@ -850,4 +897,5 @@ export function clearCachesForTests() {
   binanceOpenInterestCache.clear();
   binanceMetadataCache = null;
   binanceAlphaCache = null;
+  binanceFundingInfoCache = null;
 }

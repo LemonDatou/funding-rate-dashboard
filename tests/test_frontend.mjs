@@ -61,7 +61,7 @@ test("latest price is followed by sortable spot and contract volume columns", as
   assert.match(html, /colspan="10"/);
   assert.match(
     script,
-    /intervalCell,\s*latestPriceCell\(market\),\s*cell\(formatMoney\(market\.spot_volume_24h_usd\), "numeric"\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
+    /intervalCell,\s*latestPriceCell\(market\),\s*cell\(market\.spot_volume_pending \? "…" : formatMoney\(market\.spot_volume_24h_usd\), "numeric"\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
   );
   assert.match(script, /formatPrice\(market\.last_price\).*formatPriceChange\(market\.price_change_24h\)/s);
   assert.match(script, /number\.toExponential\(3\)/);
@@ -145,6 +145,7 @@ test("launcher only serves static files", async () => {
   assert.match(launcher, /-m http\.server/);
   assert.doesNotMatch(launcher, /uvicorn|FastAPI/);
   assert.match(nginx, /connect-src 'self' https:\/\/fapi\.binance\.com/);
+  assert.match(nginx, /https:\/\/api\.binance\.com/);
   assert.match(nginx, /https:\/\/www\.binance\.com/);
   assert.match(nginx, /https:\/\/data-api\.binance\.vision/);
   assert.match(nginx, /Cache-Control "no-cache, must-revalidate"/);

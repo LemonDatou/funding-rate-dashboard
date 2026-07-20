@@ -6,7 +6,7 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260720a";
+} from "./exchanges.js?v=20260720b";
 
 (() => {
   "use strict";
@@ -366,7 +366,7 @@ import {
         cell(fundingBounds(market), "numeric"),
         intervalCell,
         latestPriceCell(market),
-        cell(formatMoney(market.spot_volume_24h_usd), "numeric"),
+        cell(market.spot_volume_pending ? "…" : formatMoney(market.spot_volume_24h_usd), "numeric"),
         cell(formatMoney(market.volume_24h_usd), "numeric"),
         openInterestCell(market),
       );
