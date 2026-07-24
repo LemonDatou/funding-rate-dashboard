@@ -6,7 +6,7 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260720b";
+} from "./exchanges.js?v=20260725a";
 
 (() => {
   "use strict";
@@ -24,6 +24,8 @@ import {
     selectedExchanges: new Set(["binance"]),
     minVolume: 10 ** 6,
     intervalHours: null,
+    showAlpha: true,
+    showStockLike: true,
     search: "",
     loadingOpenInterest: new Set(),
     marginPoolAssets: new Set(),
@@ -187,6 +189,16 @@ import {
       : symbol;
   }
 
+  function isAlphaMarket(market) {
+    return market.exchange === "binance" && market.asset_label === "Alpha";
+  }
+
+  function isStockLikeMarket(market) {
+    return market.exchange === "binance"
+      && Boolean(market.asset_label)
+      && market.asset_label !== "Alpha";
+  }
+
   function visibleMarkets() {
     const query = state.search.trim().toUpperCase();
     const rateKey = `funding_rate_${state.unit}`;
@@ -194,6 +206,8 @@ import {
       .filter((market) => state.selectedExchanges.has(market.exchange))
       .filter((market) => (finite(market.volume_24h_usd) ?? 0) >= state.minVolume)
       .filter((market) => state.intervalHours === null || Math.abs((finite(market.interval_hours) ?? -999) - state.intervalHours) < 0.01)
+      .filter((market) => state.showAlpha || !isAlphaMarket(market))
+      .filter((market) => state.showStockLike || !isStockLikeMarket(market))
       .filter((market) => !query || `${market.symbol} ${displaySymbol(market)}`.toUpperCase().includes(query))
       .sort((left, right) => compareMarkets(left, right, state.sortKey === "funding_rate" ? rateKey : state.sortKey));
   }
@@ -835,6 +849,14 @@ import {
     intervalInput.addEventListener("input", () => {
       state.intervalHours = INTERVALS[intervalInput.value];
       $("#interval-value").textContent = state.intervalHours === null ? "*H" : `${state.intervalHours}H`;
+      renderRows();
+    });
+    $("#alpha-filter").addEventListener("change", (event) => {
+      state.showAlpha = event.target.checked;
+      renderRows();
+    });
+    $("#stock-filter").addEventListener("change", (event) => {
+      state.showStockLike = event.target.checked;
       renderRows();
     });
     $("#exchange-filters").addEventListener("change", async (event) => {

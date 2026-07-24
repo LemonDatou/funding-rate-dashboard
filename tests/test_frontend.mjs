@@ -22,6 +22,27 @@ test("page defaults to Binance and no longer exposes Gate", async () => {
   assert.match(html, /rel="noopener noreferrer"/);
 });
 
+test("Alpha and stock-like Binance markets can be hidden independently", async () => {
+  const html = await readFile(new URL("index.html", staticDir), "utf8");
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  const intervalFilter = html.indexOf('id="interval-filter"');
+  const alphaFilter = html.indexOf('id="alpha-filter"');
+  const stockFilter = html.indexOf('id="stock-filter"');
+
+  assert.ok(alphaFilter > intervalFilter);
+  assert.ok(stockFilter > alphaFilter);
+  assert.match(html, /id="alpha-filter" type="checkbox" checked \/>显示 Alpha/);
+  assert.match(html, /id="stock-filter" type="checkbox" checked \/>显示股票类/);
+  assert.match(script, /showAlpha: true/);
+  assert.match(script, /showStockLike: true/);
+  assert.match(script, /market\.exchange === "binance" && market\.asset_label === "Alpha"/);
+  assert.match(script, /Boolean\(market\.asset_label\)[\s\S]*market\.asset_label !== "Alpha"/);
+  assert.match(script, /state\.showAlpha \|\| !isAlphaMarket\(market\)/);
+  assert.match(script, /state\.showStockLike \|\| !isStockLikeMarket\(market\)/);
+  assert.match(script, /#alpha-filter[\s\S]*state\.showAlpha = event\.target\.checked/);
+  assert.match(script, /#stock-filter[\s\S]*state\.showStockLike = event\.target\.checked/);
+});
+
 test("frontend loads exchanges on demand without aggregate endpoints", async () => {
   const html = await readFile(new URL("index.html", staticDir), "utf8");
   const script = await readFile(new URL("app.js", staticDir), "utf8");
