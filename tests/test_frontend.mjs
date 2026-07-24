@@ -31,8 +31,8 @@ test("Alpha and stock-like Binance markets can be hidden independently", async (
 
   assert.ok(alphaFilter > intervalFilter);
   assert.ok(stockFilter > alphaFilter);
-  assert.match(html, /id="alpha-filter" type="checkbox" checked \/>显示 Alpha/);
-  assert.match(html, /id="stock-filter" type="checkbox" checked \/>显示股票类/);
+  assert.match(html, /id="alpha-filter" type="checkbox" checked \/>Alpha/);
+  assert.match(html, /id="stock-filter" type="checkbox" checked \/>股票/);
   assert.match(script, /showAlpha: true/);
   assert.match(script, /showStockLike: true/);
   assert.match(script, /market\.exchange === "binance" && market\.asset_label === "Alpha"/);
