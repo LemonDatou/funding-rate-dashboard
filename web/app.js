@@ -1,12 +1,13 @@
 import {
   EXCHANGES,
   EXCHANGE_LABELS,
+  contractMarketUrl,
   fetchHistory,
   fetchMarginInterestHistory,
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260726a";
+} from "./exchanges.js?v=20260726b";
 
 (() => {
   "use strict";
@@ -170,11 +171,28 @@ import {
     return td;
   }
 
+  function configureExternalLink(link, href, title) {
+    link.href = href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.title = title;
+    link.addEventListener("click", (event) => event.stopPropagation());
+  }
+
   function latestPriceCell(market) {
-    return cell(
-      `${formatPrice(market.last_price)}(${formatPriceChange(market.price_change_24h)})`,
-      `numeric price-cell ${rateClass(market.price_change_24h)}`,
-    );
+    const text = `${formatPrice(market.last_price)}(${formatPriceChange(market.price_change_24h)})`;
+    const td = cell("", `numeric price-cell ${rateClass(market.price_change_24h)}`);
+    const url = contractMarketUrl(market);
+    if (!url) {
+      td.textContent = text;
+      return td;
+    }
+    const link = document.createElement("a");
+    link.className = "contract-market-link";
+    link.textContent = text;
+    configureExternalLink(link, url, `在 ${market.exchange_label || market.exchange} 打开 ${displaySymbol(market)} 合约`);
+    td.append(link);
+    return td;
   }
 
   function displaySymbol(market) {
@@ -358,19 +376,12 @@ import {
       const symbolCell = document.createElement("td");
       const poolAsset = resolveMarginPoolAsset(market, state.marginPoolAssets);
       const borrowInterest = poolAsset ? state.marginPoolInterestRates.get(poolAsset) : null;
-      const symbolControl = document.createElement(poolAsset ? "a" : "button");
-      symbolControl.className = `symbol-button${poolAsset ? " margin-pool-link" : ""}`;
+      const symbolControl = document.createElement("button");
+      symbolControl.className = "symbol-button";
       symbolControl.textContent = displaySymbol(market);
-      if (poolAsset) {
-        symbolControl.href = `/margin-pool/assets/${encodeURIComponent(poolAsset)}`;
-        symbolControl.title = `在 Margin Pool 中查看 ${poolAsset}`;
-        symbolControl.setAttribute("aria-label", `在 Margin Pool 中查看 ${poolAsset}`);
-        symbolControl.addEventListener("click", (event) => event.stopPropagation());
-      } else {
-        symbolControl.type = "button";
-        symbolControl.setAttribute("aria-haspopup", "dialog");
-        symbolControl.setAttribute("aria-label", `查看 ${displaySymbol(market)} 历史资金费率`);
-      }
+      symbolControl.type = "button";
+      symbolControl.setAttribute("aria-haspopup", "dialog");
+      symbolControl.setAttribute("aria-label", `查看 ${displaySymbol(market)} 历史资金费率`);
       symbolCell.append(symbolControl);
       if (market.stale) {
         const dot = document.createElement("span");
@@ -380,7 +391,21 @@ import {
       }
       const exchangeCell = cell(market.exchange_label || market.exchange, "exchange-cell");
       const rateCell = cell(formatRate(market[rateKey]), `numeric ${rateClass(market[rateKey])}`);
-      const borrowInterestCell = cell(formatRate(borrowInterest?.rate1y), "numeric");
+      const borrowInterestCell = cell("", "numeric");
+      const borrowInterestText = formatRate(borrowInterest?.rate1y);
+      if (poolAsset) {
+        const borrowInterestLink = document.createElement("a");
+        borrowInterestLink.className = "margin-pool-link";
+        borrowInterestLink.textContent = borrowInterestText;
+        configureExternalLink(
+          borrowInterestLink,
+          `/margin-pool/assets/${encodeURIComponent(poolAsset)}`,
+          `在 Margin Pool 中查看 ${poolAsset}`,
+        );
+        borrowInterestCell.append(borrowInterestLink);
+      } else {
+        borrowInterestCell.textContent = borrowInterestText;
+      }
       if (borrowInterest?.timestamp) {
         borrowInterestCell.title = `最新借款日利率采集于 ${formatTimestamp(borrowInterest.timestamp)}`;
       }

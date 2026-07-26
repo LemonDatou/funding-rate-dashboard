@@ -14,6 +14,21 @@ export const EXCHANGE_LABELS = Object.freeze({
   hyperliquid: "Hyperliquid",
 });
 
+export function contractMarketUrl(market) {
+  const exchange = String(market?.exchange || "").toLowerCase();
+  const symbol = String(market?.symbol || "").trim();
+  if (!symbol) return null;
+  const encoded = encodeURIComponent(symbol);
+  if (exchange === "binance") return `https://www.binance.com/zh-CN/futures/${encoded}`;
+  if (exchange === "bitget") return `https://www.bitget.com/futures/usdt/${encoded}`;
+  if (exchange === "bybit") return `https://www.bybit.com/trade/usdt/${encoded}`;
+  if (exchange === "okx") return `https://www.okx.com/zh-hans/trade-swap/${encodeURIComponent(symbol.toLowerCase())}`;
+  if (exchange === "hyperliquid") {
+    return `https://app.hyperliquid.xyz/trade/${encoded.replace(/%3A/gi, ":")}`;
+  }
+  return null;
+}
+
 const BINANCE_CONTRACT_MULTIPLIER = /^(?:1000000|1000)(?=.+$)/;
 const BINANCE_SPOT_QUOTES = Object.freeze(["USDT", "USDC", "FDUSD"]);
 

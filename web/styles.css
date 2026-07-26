@@ -369,6 +369,15 @@ tbody tr[data-market-key]:focus-within {
   text-decoration: none;
 }
 
+.contract-market-link,
+.margin-pool-link {
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.contract-market-link:hover,
+.contract-market-link:focus-visible,
 .margin-pool-link:hover,
 .margin-pool-link:focus-visible {
   text-decoration: underline;

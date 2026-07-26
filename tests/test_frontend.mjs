@@ -122,14 +122,19 @@ test("Binance asset labels appear after the trading pair only", async () => {
   assert.match(script, /`\$\{symbol\} \(\$\{market\.asset_label\}\)`/);
 });
 
-test("supported Binance symbols link directly to Margin Pool assets", async () => {
+test("prices open contracts while names open history and borrow interest opens Margin Pool", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   const styles = await readFile(new URL("styles.css", staticDir), "utf8");
   assert.match(script, /fetch\("\/margin-pool\/api\/v1\/pools"/);
   assert.match(script, /const poolAsset = resolveMarginPoolAsset\(market, state\.marginPoolAssets\)/);
-  assert.match(script, /symbolControl\.href = `\/margin-pool\/assets\/\$\{encodeURIComponent\(poolAsset\)\}`/);
-  assert.match(script, /symbolControl\.addEventListener\("click", \(event\) => event\.stopPropagation\(\)\)/);
-  assert.doesNotMatch(styles, /\.symbol-button:hover/);
+  assert.match(script, /const symbolControl = document\.createElement\("button"\)/);
+  assert.match(script, /symbolControl\.setAttribute\("aria-haspopup", "dialog"\)/);
+  assert.doesNotMatch(script, /configureExternalLink\(symbolControl/);
+  assert.match(script, /const url = contractMarketUrl\(market\)/);
+  assert.match(script, /borrowInterestLink,[\s\S]*`\/margin-pool\/assets\/\$\{encodeURIComponent\(poolAsset\)\}`/);
+  assert.match(script, /link\.target = "_blank"/);
+  assert.match(script, /link\.rel = "noopener noreferrer"/);
+  assert.match(styles, /\.contract-market-link:hover/);
   assert.match(styles, /\.margin-pool-link:hover/);
 });
 

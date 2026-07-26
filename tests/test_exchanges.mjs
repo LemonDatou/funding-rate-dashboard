@@ -8,6 +8,7 @@ import {
   binanceAssetLabel,
   binanceSpotVolume,
   clearCachesForTests,
+  contractMarketUrl,
   fetchJson,
   fetchHistory,
   fetchMarginInterestHistory,
@@ -99,6 +100,15 @@ test.afterEach(() => {
 test("only the five CORS-capable exchanges are registered", () => {
   assert.deepEqual(EXCHANGES, ["binance", "okx", "bybit", "bitget", "hyperliquid"]);
   assert.equal(normalizedRates(0.0001, 4).rate_8h, 0.0002);
+});
+
+test("contract market URLs follow each exchange template", () => {
+  assert.equal(contractMarketUrl({ exchange: "binance", symbol: "KAITOUSDT" }), "https://www.binance.com/zh-CN/futures/KAITOUSDT");
+  assert.equal(contractMarketUrl({ exchange: "bitget", symbol: "ESPORTSUSDT" }), "https://www.bitget.com/futures/usdt/ESPORTSUSDT");
+  assert.equal(contractMarketUrl({ exchange: "bybit", symbol: "LIGHTUSDT" }), "https://www.bybit.com/trade/usdt/LIGHTUSDT");
+  assert.equal(contractMarketUrl({ exchange: "okx", symbol: "ZEC-USDT-SWAP" }), "https://www.okx.com/zh-hans/trade-swap/zec-usdt-swap");
+  assert.equal(contractMarketUrl({ exchange: "hyperliquid", symbol: "XRP" }), "https://app.hyperliquid.xyz/trade/XRP");
+  assert.equal(contractMarketUrl({ exchange: "hyperliquid", symbol: "xyz:GOOGL" }), "https://app.hyperliquid.xyz/trade/xyz:GOOGL");
 });
 
 test("Binance asset labels use non-spot assets from the official Alpha list", () => {
