@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="五家交易所永续合约资金费率看板" />
     <title>Funding Matrix</title>
-    <link rel="stylesheet" href="./styles.css?v=20260725a" />
+    <link rel="stylesheet" href="./styles.css?v=20260726a" />
   </head>
   <body>
     <main class="shell">
@@ -73,6 +73,7 @@
                   </label>
                 </th>
                 <th class="numeric"><button type="button" data-sort="funding_rate_1y" id="rate-heading">资金费率 1Y <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="borrow_interest_1y">借款利息 1Y <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="next_funding_rate">下次资金费率 <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="funding_bounds">上限 / 下限 <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="interval_hours">间隔 <span></span></button></th>
@@ -83,7 +84,7 @@
               </tr>
             </thead>
             <tbody id="market-rows">
-              <tr class="empty-row"><td colspan="10">正在连接 Binance…</td></tr>
+              <tr class="empty-row"><td colspan="11">正在连接 Binance…</td></tr>
             </tbody>
           </table>
         </div>
@@ -151,6 +152,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="./app.js?v=20260725a"></script>
+    <script type="module" src="./app.js?v=20260726a"></script>
   </body>
 </html>

@@ -6,7 +6,7 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260725a";
+} from "./exchanges.js?v=20260726a";
 
 (() => {
   "use strict";
@@ -29,6 +29,7 @@ import {
     search: "",
     loadingOpenInterest: new Set(),
     marginPoolAssets: new Set(),
+    marginPoolInterestRates: new Map(),
     generatedAt: null,
     history: null,
     historyRequestId: 0,
@@ -223,13 +224,31 @@ import {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       const items = Array.isArray(payload?.items) ? payload.items : [];
-      state.marginPoolAssets = new Set(
-        items.map((item) => String(item?.symbol || "").trim().toUpperCase()).filter(Boolean),
-      );
+      const assets = new Set();
+      const interestRates = new Map();
+      for (const item of items) {
+        const symbol = String(item?.symbol || "").trim().toUpperCase();
+        if (!symbol) continue;
+        assets.add(symbol);
+        const dailyRate = finite(item?.latest_interest_rate?.daily_interest_rate);
+        if (dailyRate === null) continue;
+        interestRates.set(symbol, {
+          rate1y: dailyRate * 365,
+          timestamp: finite(item?.latest_interest_rate?.timestamp_ms),
+        });
+      }
+      state.marginPoolAssets = assets;
+      state.marginPoolInterestRates = interestRates;
     } catch (_) {
       state.marginPoolAssets = new Set();
+      state.marginPoolInterestRates = new Map();
     }
     renderRows();
+  }
+
+  function borrowInterestRate(market) {
+    const asset = resolveMarginPoolAsset(market, state.marginPoolAssets);
+    return asset ? state.marginPoolInterestRates.get(asset) ?? null : null;
   }
 
   function compareMarkets(left, right, key) {
@@ -254,6 +273,7 @@ import {
 
   function sortValue(market, key) {
     if (key === "next_funding_rate") return finite(market.next_funding_rate) ?? finite(market.funding_rate);
+    if (key === "borrow_interest_1y") return finite(borrowInterestRate(market)?.rate1y);
     if (key === "funding_bounds") {
       const cap = finite(market.funding_cap);
       const floor = finite(market.funding_floor);
@@ -321,7 +341,7 @@ import {
       const tr = document.createElement("tr");
       tr.className = "empty-row";
       const td = cell(selectedTotal ? "当前筛选条件下没有市场" : (state.loadingExchanges.size ? "正在加载…" : "暂无可用数据"));
-      td.colSpan = 9;
+      td.colSpan = 11;
       tr.append(td);
       rowsElement.append(tr);
       updateSortIndicators();
@@ -337,6 +357,7 @@ import {
 
       const symbolCell = document.createElement("td");
       const poolAsset = resolveMarginPoolAsset(market, state.marginPoolAssets);
+      const borrowInterest = poolAsset ? state.marginPoolInterestRates.get(poolAsset) : null;
       const symbolControl = document.createElement(poolAsset ? "a" : "button");
       symbolControl.className = `symbol-button${poolAsset ? " margin-pool-link" : ""}`;
       symbolControl.textContent = displaySymbol(market);
@@ -359,6 +380,10 @@ import {
       }
       const exchangeCell = cell(market.exchange_label || market.exchange, "exchange-cell");
       const rateCell = cell(formatRate(market[rateKey]), `numeric ${rateClass(market[rateKey])}`);
+      const borrowInterestCell = cell(formatRate(borrowInterest?.rate1y), "numeric");
+      if (borrowInterest?.timestamp) {
+        borrowInterestCell.title = `最新借款日利率采集于 ${formatTimestamp(borrowInterest.timestamp)}`;
+      }
       const interval = finite(market.interval_hours);
       const intervalCell = cell(interval === null ? "—" : `${interval}H`, "numeric interval-cell");
       const nextRate = finite(market.next_funding_rate) ?? finite(market.funding_rate);
@@ -376,6 +401,7 @@ import {
         exchangeCell,
         symbolCell,
         rateCell,
+        borrowInterestCell,
         nextCell,
         cell(fundingBounds(market), "numeric"),
         intervalCell,

@@ -71,7 +71,12 @@ test("latest price is followed by sortable spot and contract volume columns", as
   const contractVolumeHeading = html.indexOf('data-sort="volume_24h_usd"');
   const openInterestHeading = html.indexOf('data-sort="open_interest_usd"');
   const priceHeading = html.indexOf('data-sort="price_change_24h"');
+  const fundingHeading = html.indexOf('data-sort="funding_rate_1y"');
+  const borrowInterestHeading = html.indexOf('data-sort="borrow_interest_1y"');
+  const nextFundingHeading = html.indexOf('data-sort="next_funding_rate"');
 
+  assert.ok(borrowInterestHeading > fundingHeading);
+  assert.ok(nextFundingHeading > borrowInterestHeading);
   assert.ok(priceHeading > html.indexOf('data-sort="interval_hours"'));
   assert.ok(spotVolumeHeading > priceHeading);
   assert.ok(contractVolumeHeading > spotVolumeHeading);
@@ -79,13 +84,22 @@ test("latest price is followed by sortable spot and contract volume columns", as
   assert.match(html, /合约成交额 ≥/);
   assert.match(html, />现货成交额 <span>/);
   assert.match(html, />合约成交额 <span>/);
-  assert.match(html, /colspan="10"/);
+  assert.match(html, />借款利息 1Y <span>/);
+  assert.match(html, /colspan="11"/);
   assert.match(
     script,
-    /intervalCell,\s*latestPriceCell\(market\),\s*cell\(market\.spot_volume_pending \? "…" : formatMoney\(market\.spot_volume_24h_usd\), "numeric"\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
+    /rateCell,\s*borrowInterestCell,\s*nextCell,[\s\S]*intervalCell,\s*latestPriceCell\(market\),\s*cell\(market\.spot_volume_pending \? "…" : formatMoney\(market\.spot_volume_24h_usd\), "numeric"\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
   );
   assert.match(script, /formatPrice\(market\.last_price\).*formatPriceChange\(market\.price_change_24h\)/s);
   assert.match(script, /number\.toExponential\(3\)/);
+});
+
+test("latest Margin Pool rates populate sortable annual borrow interest", async () => {
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  assert.match(script, /latest_interest_rate\?\.daily_interest_rate/);
+  assert.match(script, /rate1y: dailyRate \* 365/);
+  assert.match(script, /if \(key === "borrow_interest_1y"\) return finite\(borrowInterestRate\(market\)\?\.rate1y\)/);
+  assert.match(script, /formatRate\(borrowInterest\?\.rate1y\)/);
 });
 
 test("rates use four decimals and symmetric funding bounds use compact notation", async () => {
