@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="五家交易所永续合约资金费率看板" />
     <title>Funding Matrix</title>
-    <link rel="stylesheet" href="./styles.css?v=20260728a" />
+    <link rel="stylesheet" href="./styles.css?v=20260729a" />
   </head>
   <body>
     <main class="shell">
@@ -17,7 +17,7 @@
             <input id="volume-filter" type="range" min="2" max="10" step="1" value="6" />
           </label>
           <label class="range-control range-control-interval">
-            <span>间隔 = <strong id="interval-value">*H</strong></span>
+            <span>间隔 ≤ <strong id="interval-value">*H</strong></span>
             <input id="interval-filter" type="range" min="-1" max="3" step="1" value="-1" />
           </label>
           <div class="asset-filters" role="group" aria-label="资产筛选">
@@ -75,17 +75,16 @@
                 </th>
                 <th class="numeric"><button type="button" data-sort="funding_rate_1y" id="rate-heading">资金费率 1Y <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="borrow_interest_1y">借款利息 1Y <span></span></button></th>
-                <th class="numeric"><button type="button" data-sort="next_funding_rate">下次资金费率 <span></span></button></th>
-                <th class="numeric"><button type="button" data-sort="funding_bounds">上限 / 下限 <span></span></button></th>
-                <th class="numeric"><button type="button" data-sort="interval_hours">间隔 <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="price_change_24h">最新价格 <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="spot_volume_24h_usd">现货成交额 <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="volume_24h_usd">合约成交额 <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="next_funding_rate">下次资金费率 <span></span></button></th>
+                <th class="numeric"><button type="button" data-sort="interval_hours">间隔 <span></span></button></th>
                 <th class="numeric"><button type="button" data-sort="open_interest_usd" title="Binance 点击空白单元格后按币对加载">未平仓额 <span></span></button></th>
               </tr>
             </thead>
             <tbody id="market-rows">
-              <tr class="empty-row"><td colspan="11">正在连接 Binance…</td></tr>
+              <tr class="empty-row"><td colspan="10">正在连接 Binance…</td></tr>
             </tbody>
           </table>
         </div>
@@ -153,6 +152,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="./app.js?v=20260728a"></script>
+    <script type="module" src="./app.js?v=20260729a"></script>
   </body>
 </html>

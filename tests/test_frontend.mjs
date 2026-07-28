@@ -81,21 +81,24 @@ test("latest price is followed by sortable spot and contract volume columns", as
   const fundingHeading = html.indexOf('data-sort="funding_rate_1y"');
   const borrowInterestHeading = html.indexOf('data-sort="borrow_interest_1y"');
   const nextFundingHeading = html.indexOf('data-sort="next_funding_rate"');
+  const intervalHeading = html.indexOf('data-sort="interval_hours"');
 
   assert.ok(borrowInterestHeading > fundingHeading);
-  assert.ok(nextFundingHeading > borrowInterestHeading);
-  assert.ok(priceHeading > html.indexOf('data-sort="interval_hours"'));
+  assert.ok(priceHeading > borrowInterestHeading);
   assert.ok(spotVolumeHeading > priceHeading);
   assert.ok(contractVolumeHeading > spotVolumeHeading);
-  assert.ok(openInterestHeading > contractVolumeHeading);
+  assert.ok(nextFundingHeading > contractVolumeHeading);
+  assert.ok(intervalHeading > nextFundingHeading);
+  assert.ok(openInterestHeading > intervalHeading);
+  assert.doesNotMatch(html, /funding_bounds|上限 \/ 下限/);
   assert.match(html, /合约成交额 ≥/);
   assert.match(html, />现货成交额 <span>/);
   assert.match(html, />合约成交额 <span>/);
   assert.match(html, />借款利息 1Y <span>/);
-  assert.match(html, /colspan="11"/);
+  assert.match(html, /colspan="10"/);
   assert.match(
     script,
-    /rateCell,\s*borrowInterestCell,\s*nextCell,[\s\S]*intervalCell,\s*latestPriceCell\(market\),\s*cell\(market\.spot_volume_pending \? "…" : formatMoney\(market\.spot_volume_24h_usd\), "numeric"\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*openInterestCell\(market\),/,
+    /rateCell,\s*borrowInterestCell,\s*latestPriceCell\(market\),\s*cell\(market\.spot_volume_pending \? "…" : formatMoney\(market\.spot_volume_24h_usd\), "numeric"\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*nextCell,\s*intervalCell,\s*openInterestCell\(market\),/,
   );
   assert.match(script, /formatPrice\(market\.last_price\).*formatPriceChange\(market\.price_change_24h\)/s);
   assert.match(script, /number\.toExponential\(3\)/);
@@ -121,10 +124,16 @@ test("clicking a market name toggles a persistent red mark", async () => {
   assert.match(styles, /\.symbol-button\.marked \{\s*color: var\(--negative\);/);
 });
 
-test("rates use four decimals and symmetric funding bounds use compact notation", async () => {
+test("rates use four decimals", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   assert.match(script, /percent\.toFixed\(4\)/);
-  assert.match(script, /return `±\$\{formatRate\(Math\.abs\(cap\)\)\}`/);
+});
+
+test("interval filter is an inclusive upper bound", async () => {
+  const html = await readFile(new URL("index.html", staticDir), "utf8");
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  assert.match(html, /间隔 ≤ <strong id="interval-value">\*H<\/strong>/);
+  assert.match(script, /\(finite\(market\.interval_hours\) \?\? Infinity\) <= state\.intervalHours/);
 });
 
 test("positive rates are green and negative rates are red in both themes", async () => {

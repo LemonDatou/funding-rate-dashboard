@@ -7,7 +7,7 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260728a";
+} from "./exchanges.js?v=20260729a";
 
 (() => {
   "use strict";
@@ -165,19 +165,6 @@ import {
     return unit === "8h" ? raw * 8 / interval : raw * 24 * 365 / interval;
   }
 
-  function fundingBounds(market) {
-    let cap = finite(market.funding_cap);
-    let floor = finite(market.funding_floor);
-    if (cap === null && floor === null) return "—";
-    if (cap !== null && floor === null) floor = -Math.abs(cap);
-    if (floor !== null && cap === null) cap = Math.abs(floor);
-    if (cap >= 0 && floor <= 0 && formatRate(Math.abs(cap)) === formatRate(Math.abs(floor))) {
-      return `±${formatRate(Math.abs(cap))}`;
-    }
-    const signedRate = (value) => `${value >= 0 ? "+" : ""}${formatRate(value)}`;
-    return `${signedRate(cap)} / ${signedRate(floor)}`;
-  }
-
   function cell(text, className = "") {
     const td = document.createElement("td");
     td.textContent = text;
@@ -254,7 +241,7 @@ import {
     return state.markets
       .filter((market) => state.selectedExchanges.has(market.exchange))
       .filter((market) => (finite(market.volume_24h_usd) ?? 0) >= state.minVolume)
-      .filter((market) => state.intervalHours === null || Math.abs((finite(market.interval_hours) ?? -999) - state.intervalHours) < 0.01)
+      .filter((market) => state.intervalHours === null || (finite(market.interval_hours) ?? Infinity) <= state.intervalHours)
       .filter((market) => state.showAlpha || !isAlphaMarket(market))
       .filter((market) => state.showStockLike || !isStockLikeMarket(market))
       .filter((market) => !state.onlyMarked || state.markedMarkets.has(marketKey(market)))
@@ -331,11 +318,6 @@ import {
   function sortValue(market, key) {
     if (key === "next_funding_rate") return finite(market.next_funding_rate) ?? finite(market.funding_rate);
     if (key === "borrow_interest_1y") return finite(borrowInterestRate(market)?.rate1y);
-    if (key === "funding_bounds") {
-      const cap = finite(market.funding_cap);
-      const floor = finite(market.funding_floor);
-      return cap !== null && floor !== null ? cap - floor : cap ?? (floor !== null ? Math.abs(floor) : null);
-    }
     return market[key];
   }
 
@@ -398,7 +380,7 @@ import {
       const tr = document.createElement("tr");
       tr.className = "empty-row";
       const td = cell(selectedTotal ? "当前筛选条件下没有市场" : (state.loadingExchanges.size ? "正在加载…" : "暂无可用数据"));
-      td.colSpan = 11;
+      td.colSpan = 10;
       tr.append(td);
       rowsElement.append(tr);
       updateSortIndicators();
@@ -473,12 +455,11 @@ import {
         symbolCell,
         rateCell,
         borrowInterestCell,
-        nextCell,
-        cell(fundingBounds(market), "numeric"),
-        intervalCell,
         latestPriceCell(market),
         cell(market.spot_volume_pending ? "…" : formatMoney(market.spot_volume_24h_usd), "numeric"),
         cell(formatMoney(market.volume_24h_usd), "numeric"),
+        nextCell,
+        intervalCell,
         openInterestCell(market),
       );
       tr.addEventListener("click", () => openHistory(market));
