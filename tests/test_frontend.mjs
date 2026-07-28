@@ -22,25 +22,32 @@ test("page defaults to Binance and no longer exposes Gate", async () => {
   assert.match(html, /rel="noopener noreferrer"/);
 });
 
-test("Alpha and stock-like Binance markets can be hidden independently", async () => {
+test("Alpha and stock-like markets default hidden and marked markets can be filtered", async () => {
   const html = await readFile(new URL("index.html", staticDir), "utf8");
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   const intervalFilter = html.indexOf('id="interval-filter"');
   const alphaFilter = html.indexOf('id="alpha-filter"');
   const stockFilter = html.indexOf('id="stock-filter"');
+  const markedFilter = html.indexOf('id="marked-filter"');
 
   assert.ok(alphaFilter > intervalFilter);
   assert.ok(stockFilter > alphaFilter);
-  assert.match(html, /id="alpha-filter" type="checkbox" checked \/>Alpha/);
-  assert.match(html, /id="stock-filter" type="checkbox" checked \/>股票/);
-  assert.match(script, /showAlpha: true/);
-  assert.match(script, /showStockLike: true/);
+  assert.ok(markedFilter > stockFilter);
+  assert.match(html, /id="alpha-filter" type="checkbox" \/>Alpha/);
+  assert.match(html, /id="stock-filter" type="checkbox" \/>股票/);
+  assert.match(html, /id="marked-filter" type="checkbox" \/>标记/);
+  assert.doesNotMatch(html, /id="(?:alpha|stock|marked)-filter"[^>]*checked/);
+  assert.match(script, /showAlpha: false/);
+  assert.match(script, /showStockLike: false/);
+  assert.match(script, /onlyMarked: false/);
   assert.match(script, /market\.exchange === "binance" && market\.asset_label === "Alpha"/);
   assert.match(script, /Boolean\(market\.asset_label\)[\s\S]*market\.asset_label !== "Alpha"/);
   assert.match(script, /state\.showAlpha \|\| !isAlphaMarket\(market\)/);
   assert.match(script, /state\.showStockLike \|\| !isStockLikeMarket\(market\)/);
+  assert.match(script, /!state\.onlyMarked \|\| state\.markedMarkets\.has\(marketKey\(market\)\)/);
   assert.match(script, /#alpha-filter[\s\S]*state\.showAlpha = event\.target\.checked/);
   assert.match(script, /#stock-filter[\s\S]*state\.showStockLike = event\.target\.checked/);
+  assert.match(script, /#marked-filter[\s\S]*state\.onlyMarked = event\.target\.checked/);
 });
 
 test("frontend loads exchanges on demand without aggregate endpoints", async () => {
@@ -100,6 +107,18 @@ test("latest Margin Pool rates populate sortable annual borrow interest", async 
   assert.match(script, /rate1y: dailyRate \* 365/);
   assert.match(script, /if \(key === "borrow_interest_1y"\) return finite\(borrowInterestRate\(market\)\?\.rate1y\)/);
   assert.match(script, /formatRate\(borrowInterest\?\.rate1y\)/);
+  assert.match(script, /setInterval\(loadMarginPoolAssets, 5 \* 60_000\)/);
+  assert.match(script, /loadMarginPoolAssets\(\),[\s\S]*loadExchange\(exchange, \{ force: true \}\)/);
+});
+
+test("clicking a market name toggles a persistent red mark", async () => {
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  const styles = await readFile(new URL("styles.css", staticDir), "utf8");
+  assert.match(script, /funding-matrix-marked-markets/);
+  assert.match(script, /localStorage\.setItem\(MARKED_MARKETS_STORAGE_KEY/);
+  assert.match(script, /symbolControl\.classList\.toggle\("marked", marked\)/);
+  assert.match(script, /symbolControl\.addEventListener\("click", \(event\) => \{[\s\S]*event\.stopPropagation\(\);[\s\S]*toggleMarkedMarket\(market\)/);
+  assert.match(styles, /\.symbol-button\.marked \{\s*color: var\(--negative\);/);
 });
 
 test("rates use four decimals and symmetric funding bounds use compact notation", async () => {
@@ -122,13 +141,13 @@ test("Binance asset labels appear after the trading pair only", async () => {
   assert.match(script, /`\$\{symbol\} \(\$\{market\.asset_label\}\)`/);
 });
 
-test("prices open contracts while names open history and borrow interest opens Margin Pool", async () => {
+test("prices open contracts while names toggle marks and borrow interest opens Margin Pool", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   const styles = await readFile(new URL("styles.css", staticDir), "utf8");
   assert.match(script, /fetch\("\/margin-pool\/api\/v1\/pools"/);
   assert.match(script, /const poolAsset = resolveMarginPoolAsset\(market, state\.marginPoolAssets\)/);
   assert.match(script, /const symbolControl = document\.createElement\("button"\)/);
-  assert.match(script, /symbolControl\.setAttribute\("aria-haspopup", "dialog"\)/);
+  assert.match(script, /toggleMarkedMarket\(market\)/);
   assert.doesNotMatch(script, /configureExternalLink\(symbolControl/);
   assert.match(script, /const url = contractMarketUrl\(market\)/);
   assert.match(script, /borrowInterestLink,[\s\S]*`\/margin-pool\/assets\/\$\{encodeURIComponent\(poolAsset\)\}`/);

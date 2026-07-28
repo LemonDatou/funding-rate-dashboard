@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="五家交易所永续合约资金费率看板" />
     <title>Funding Matrix</title>
-    <link rel="stylesheet" href="./styles.css?v=20260726b" />
+    <link rel="stylesheet" href="./styles.css?v=20260728a" />
   </head>
   <body>
     <main class="shell">
@@ -20,9 +20,10 @@
             <span>间隔 = <strong id="interval-value">*H</strong></span>
             <input id="interval-filter" type="range" min="-1" max="3" step="1" value="-1" />
           </label>
-          <div class="asset-filters" role="group" aria-label="币安资产类型">
-            <label><input id="alpha-filter" type="checkbox" checked />Alpha</label>
-            <label><input id="stock-filter" type="checkbox" checked />股票</label>
+          <div class="asset-filters" role="group" aria-label="资产筛选">
+            <label><input id="alpha-filter" type="checkbox" />Alpha</label>
+            <label><input id="stock-filter" type="checkbox" />股票</label>
+            <label><input id="marked-filter" type="checkbox" />标记</label>
           </div>
           <div class="brand">
             <div class="brand-title" aria-label="Funding Matrix">
@@ -152,6 +153,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="./app.js?v=20260726b"></script>
+    <script type="module" src="./app.js?v=20260728a"></script>
   </body>
 </html>

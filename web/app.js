@@ -7,12 +7,23 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260726b";
+} from "./exchanges.js?v=20260728a";
 
 (() => {
   "use strict";
 
   const INTERVALS = { "-1": null, 0: 1, 1: 2, 2: 4, 3: 8 };
+  const MARKED_MARKETS_STORAGE_KEY = "funding-matrix-marked-markets";
+
+  function loadMarkedMarkets() {
+    try {
+      const value = JSON.parse(localStorage.getItem(MARKED_MARKETS_STORAGE_KEY) || "[]");
+      return new Set(Array.isArray(value) ? value.filter((item) => typeof item === "string") : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
   const state = {
     markets: [],
     errors: {},
@@ -25,12 +36,15 @@ import {
     selectedExchanges: new Set(["binance"]),
     minVolume: 10 ** 6,
     intervalHours: null,
-    showAlpha: true,
-    showStockLike: true,
+    showAlpha: false,
+    showStockLike: false,
+    onlyMarked: false,
+    markedMarkets: loadMarkedMarkets(),
     search: "",
     loadingOpenInterest: new Set(),
     marginPoolAssets: new Set(),
     marginPoolInterestRates: new Map(),
+    marginPoolRequest: null,
     generatedAt: null,
     history: null,
     historyRequestId: 0,
@@ -218,6 +232,22 @@ import {
       && market.asset_label !== "Alpha";
   }
 
+  function marketKey(market) {
+    return `${market.exchange}:${market.symbol}`;
+  }
+
+  function toggleMarkedMarket(market) {
+    const key = marketKey(market);
+    if (state.markedMarkets.has(key)) state.markedMarkets.delete(key);
+    else state.markedMarkets.add(key);
+    try {
+      localStorage.setItem(MARKED_MARKETS_STORAGE_KEY, JSON.stringify([...state.markedMarkets]));
+    } catch (_) {
+      // Keep the mark for this page even when browser storage is unavailable.
+    }
+    renderRows();
+  }
+
   function visibleMarkets() {
     const query = state.search.trim().toUpperCase();
     const rateKey = `funding_rate_${state.unit}`;
@@ -227,41 +257,50 @@ import {
       .filter((market) => state.intervalHours === null || Math.abs((finite(market.interval_hours) ?? -999) - state.intervalHours) < 0.01)
       .filter((market) => state.showAlpha || !isAlphaMarket(market))
       .filter((market) => state.showStockLike || !isStockLikeMarket(market))
+      .filter((market) => !state.onlyMarked || state.markedMarkets.has(marketKey(market)))
       .filter((market) => !query || `${market.symbol} ${displaySymbol(market)}`.toUpperCase().includes(query))
       .sort((left, right) => compareMarkets(left, right, state.sortKey === "funding_rate" ? rateKey : state.sortKey));
   }
 
   async function loadMarginPoolAssets() {
-    try {
-      const response = await fetch("/margin-pool/api/v1/pools", {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        credentials: "omit",
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = await response.json();
-      const items = Array.isArray(payload?.items) ? payload.items : [];
-      const assets = new Set();
-      const interestRates = new Map();
-      for (const item of items) {
-        const symbol = String(item?.symbol || "").trim().toUpperCase();
-        if (!symbol) continue;
-        assets.add(symbol);
-        const dailyRate = finite(item?.latest_interest_rate?.daily_interest_rate);
-        if (dailyRate === null) continue;
-        interestRates.set(symbol, {
-          rate1y: dailyRate * 365,
-          timestamp: finite(item?.latest_interest_rate?.timestamp_ms),
+    if (state.marginPoolRequest) return state.marginPoolRequest;
+    const request = (async () => {
+      try {
+        const response = await fetch("/margin-pool/api/v1/pools", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          credentials: "omit",
+          cache: "no-store",
         });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        const assets = new Set();
+        const interestRates = new Map();
+        for (const item of items) {
+          const symbol = String(item?.symbol || "").trim().toUpperCase();
+          if (!symbol) continue;
+          assets.add(symbol);
+          const dailyRate = finite(item?.latest_interest_rate?.daily_interest_rate);
+          if (dailyRate === null) continue;
+          interestRates.set(symbol, {
+            rate1y: dailyRate * 365,
+            timestamp: finite(item?.latest_interest_rate?.timestamp_ms),
+          });
+        }
+        state.marginPoolAssets = assets;
+        state.marginPoolInterestRates = interestRates;
+      } catch (_) {
+        // Keep the last successful values when a background refresh fails.
       }
-      state.marginPoolAssets = assets;
-      state.marginPoolInterestRates = interestRates;
-    } catch (_) {
-      state.marginPoolAssets = new Set();
-      state.marginPoolInterestRates = new Map();
+      renderRows();
+    })();
+    state.marginPoolRequest = request;
+    try {
+      await request;
+    } finally {
+      if (state.marginPoolRequest === request) state.marginPoolRequest = null;
     }
-    renderRows();
   }
 
   function borrowInterestRate(market) {
@@ -376,12 +415,19 @@ import {
       const symbolCell = document.createElement("td");
       const poolAsset = resolveMarginPoolAsset(market, state.marginPoolAssets);
       const borrowInterest = poolAsset ? state.marginPoolInterestRates.get(poolAsset) : null;
+      const marked = state.markedMarkets.has(marketKey(market));
       const symbolControl = document.createElement("button");
       symbolControl.className = "symbol-button";
+      symbolControl.classList.toggle("marked", marked);
       symbolControl.textContent = displaySymbol(market);
       symbolControl.type = "button";
-      symbolControl.setAttribute("aria-haspopup", "dialog");
-      symbolControl.setAttribute("aria-label", `查看 ${displaySymbol(market)} 历史资金费率`);
+      symbolControl.setAttribute("aria-pressed", String(marked));
+      symbolControl.setAttribute("aria-label", `${marked ? "取消标记" : "标记"} ${displaySymbol(market)}`);
+      symbolControl.title = marked ? "点击取消标记" : "点击标记为红色";
+      symbolControl.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleMarkedMarket(market);
+      });
       symbolCell.append(symbolControl);
       if (market.stale) {
         const dot = document.createElement("span");
@@ -560,7 +606,10 @@ import {
 
   async function refreshSelectedExchanges() {
     const exchanges = [...state.selectedExchanges];
-    await Promise.all(exchanges.map((exchange) => loadExchange(exchange, { force: true })));
+    await Promise.all([
+      loadMarginPoolAssets(),
+      ...exchanges.map((exchange) => loadExchange(exchange, { force: true })),
+    ]);
   }
 
   function historyValue(point) {
@@ -910,6 +959,10 @@ import {
       state.showStockLike = event.target.checked;
       renderRows();
     });
+    $("#marked-filter").addEventListener("change", (event) => {
+      state.onlyMarked = event.target.checked;
+      renderRows();
+    });
     $("#exchange-filters").addEventListener("change", async (event) => {
       if (!(event.target instanceof HTMLInputElement)) return;
       const exchange = event.target.value;
@@ -995,4 +1048,5 @@ import {
   loadMarginPoolAssets();
   loadExchange("binance");
   setInterval(updateCountdowns, 30_000);
+  setInterval(loadMarginPoolAssets, 5 * 60_000);
 })();

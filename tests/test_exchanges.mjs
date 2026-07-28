@@ -15,6 +15,7 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   marginPoolSearch,
+  normalizedHistoryPoints,
   normalizedRates,
   resolveMarginPoolAsset,
 } from "../web/exchanges.js";
@@ -100,6 +101,20 @@ test.afterEach(() => {
 test("only the five CORS-capable exchanges are registered", () => {
   assert.deepEqual(EXCHANGES, ["binance", "okx", "bybit", "bitget", "hyperliquid"]);
   assert.equal(normalizedRates(0.0001, 4).rate_8h, 0.0002);
+});
+
+test("historical funding rates use each settlement window instead of the latest interval", () => {
+  const hour = 3_600_000;
+  const start = 1_700_000_000_000;
+  const points = normalizedHistoryPoints([
+    [start, "0.0001"],
+    [start + hour, "0.0001"],
+    [start + 2 * hour, "0.0001"],
+    [start + 6 * hour, "0.0001"],
+    [start + 10 * hour, "0.0001"],
+  ], 4);
+  assert.deepEqual(points.map((point) => point.interval_hours), [1, 1, 1, 4, 4]);
+  assert.deepEqual(points.map((point) => point.rate_8h), [0.0008, 0.0008, 0.0008, 0.0002, 0.0002]);
 });
 
 test("contract market URLs follow each exchange template", () => {

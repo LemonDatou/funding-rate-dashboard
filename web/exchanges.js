@@ -432,21 +432,40 @@ function makeMarket(exchange, {
   };
 }
 
-function historyResult(exchange, symbol, intervalHours, pairs, limit) {
+function historicalIntervalHours(points, index, fallbackIntervalHours) {
+  if (points.length < 2) return fallbackIntervalHours;
+  const current = Date.parse(points[index].timestamp);
+  const adjacent = index > 0
+    ? Date.parse(points[index - 1].timestamp)
+    : Date.parse(points[index + 1].timestamp);
+  const milliseconds = index > 0 ? current - adjacent : adjacent - current;
+  const hours = milliseconds / 3_600_000;
+  if (!Number.isFinite(hours) || hours <= 0 || hours > 24) return fallbackIntervalHours;
+  return Math.round(hours * 60) / 60;
+}
+
+export function normalizedHistoryPoints(pairs, intervalHours, limit = 1000) {
   const unique = new Map();
   for (const [rawTimestamp, rawRate, seconds = false] of pairs) {
     const timestamp = timestampIso(rawTimestamp, seconds);
-    if (!timestamp) continue;
-    try {
-      const normalized = normalizedRates(rawRate, intervalHours);
-      unique.set(timestamp, { timestamp, ...normalized });
-    } catch (_) {
-      // Ignore malformed exchange rows without losing the rest of the history.
-    }
+    const rate = finite(rawRate);
+    if (!timestamp || rate === null) continue;
+    unique.set(timestamp, { timestamp, rate });
   }
-  const points = [...unique.values()]
-    .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
-    .slice(-limit);
+  const ordered = [...unique.values()]
+    .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+  return ordered.map((point, index) => {
+    const pointInterval = historicalIntervalHours(ordered, index, intervalHours);
+    return {
+      timestamp: point.timestamp,
+      interval_hours: pointInterval,
+      ...normalizedRates(point.rate, pointInterval),
+    };
+  }).slice(-limit);
+}
+
+function historyResult(exchange, symbol, intervalHours, pairs, limit) {
+  const points = normalizedHistoryPoints(pairs, intervalHours, limit);
   return { exchange, symbol, interval_hours: intervalHours, points };
 }
 

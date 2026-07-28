@@ -369,6 +369,10 @@ tbody tr[data-market-key]:focus-within {
   text-decoration: none;
 }
 
+.symbol-button.marked {
+  color: var(--negative);
+}
+
 .contract-market-link,
 .margin-pool-link {
   color: inherit;
