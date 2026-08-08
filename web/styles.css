@@ -10,6 +10,7 @@
   --surface: #ffffff;
   --positive: #15803d;
   --negative: #dc2626;
+  --low-volume: #7c3aed;
   --accent: #2563eb;
   --borrow: #d97706;
   --error: #b91c1c;
@@ -27,6 +28,7 @@
   --surface: #09090b;
   --positive: #4ade80;
   --negative: #f87171;
+  --low-volume: #c084fc;
   --accent: #60a5fa;
   --borrow: #fbbf24;
   --error: #fca5a5;
@@ -426,7 +428,7 @@ tbody tr[data-market-key]:focus-within {
 .rate-zero { color: var(--muted); }
 
 .spot-volume-low {
-  color: var(--negative);
+  color: var(--low-volume);
   font-weight: 700;
 }
 

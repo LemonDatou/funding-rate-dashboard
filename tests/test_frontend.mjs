@@ -102,7 +102,9 @@ test("latest price is followed by sortable spot and contract volume columns", as
     /rateCell,\s*borrowInterestCell,\s*latestPriceCell\(market\),\s*spotVolumeCell\(market\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*nextCell,\s*intervalCell,\s*openInterestCell\(market\),/,
   );
   assert.match(script, /volume !== null && volume < 1e6/);
-  assert.match(styles, /\.spot-volume-low \{[\s\S]*color: var\(--negative\);[\s\S]*font-weight: 700;/);
+  assert.match(styles, /--low-volume: #7c3aed;/);
+  assert.match(styles, /--low-volume: #c084fc;/);
+  assert.match(styles, /\.spot-volume-low \{[\s\S]*color: var\(--low-volume\);[\s\S]*font-weight: 700;/);
   assert.match(script, /sortKey: "funding_rate_1y",\s*sortDirection: "asc"/);
   assert.match(script, /formatPrice\(market\.last_price\).*formatPriceChange\(market\.price_change_24h\)/s);
   assert.match(script, /number\.toExponential\(3\)/);
