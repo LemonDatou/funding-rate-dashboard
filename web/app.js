@@ -7,7 +7,7 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260729a";
+} from "./exchanges.js?v=20260808a";
 
 (() => {
   "use strict";
@@ -169,6 +169,15 @@ import {
     const td = document.createElement("td");
     td.textContent = text;
     if (className) td.className = className;
+    return td;
+  }
+
+  function spotVolumeCell(market) {
+    const volume = finite(market.spot_volume_24h_usd);
+    const td = cell(market.spot_volume_pending ? "…" : formatMoney(volume), "numeric");
+    if (!market.spot_volume_pending && volume !== null && volume < 1e6) {
+      td.classList.add("spot-volume-low");
+    }
     return td;
   }
 
@@ -456,7 +465,7 @@ import {
         rateCell,
         borrowInterestCell,
         latestPriceCell(market),
-        cell(market.spot_volume_pending ? "…" : formatMoney(market.spot_volume_24h_usd), "numeric"),
+        spotVolumeCell(market),
         cell(formatMoney(market.volume_24h_usd), "numeric"),
         nextCell,
         intervalCell,

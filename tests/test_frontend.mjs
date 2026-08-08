@@ -74,6 +74,7 @@ test("frontend loads exchanges on demand without aggregate endpoints", async () 
 test("latest price is followed by sortable spot and contract volume columns", async () => {
   const html = await readFile(new URL("index.html", staticDir), "utf8");
   const script = await readFile(new URL("app.js", staticDir), "utf8");
+  const styles = await readFile(new URL("styles.css", staticDir), "utf8");
   const spotVolumeHeading = html.indexOf('data-sort="spot_volume_24h_usd"');
   const contractVolumeHeading = html.indexOf('data-sort="volume_24h_usd"');
   const openInterestHeading = html.indexOf('data-sort="open_interest_usd"');
@@ -98,8 +99,10 @@ test("latest price is followed by sortable spot and contract volume columns", as
   assert.match(html, /colspan="10"/);
   assert.match(
     script,
-    /rateCell,\s*borrowInterestCell,\s*latestPriceCell\(market\),\s*cell\(market\.spot_volume_pending \? "…" : formatMoney\(market\.spot_volume_24h_usd\), "numeric"\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*nextCell,\s*intervalCell,\s*openInterestCell\(market\),/,
+    /rateCell,\s*borrowInterestCell,\s*latestPriceCell\(market\),\s*spotVolumeCell\(market\),\s*cell\(formatMoney\(market\.volume_24h_usd\), "numeric"\),\s*nextCell,\s*intervalCell,\s*openInterestCell\(market\),/,
   );
+  assert.match(script, /volume !== null && volume < 1e6/);
+  assert.match(styles, /\.spot-volume-low \{[\s\S]*color: var\(--negative\);[\s\S]*font-weight: 700;/);
   assert.match(script, /formatPrice\(market\.last_price\).*formatPriceChange\(market\.price_change_24h\)/s);
   assert.match(script, /number\.toExponential\(3\)/);
 });

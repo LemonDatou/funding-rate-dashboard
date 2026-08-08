@@ -425,6 +425,11 @@ tbody tr[data-market-key]:focus-within {
 .rate-negative { color: var(--negative); }
 .rate-zero { color: var(--muted); }
 
+.spot-volume-low {
+  color: var(--negative);
+  font-weight: 700;
+}
+
 .stale-dot {
   display: inline-block;
   width: 5px;
