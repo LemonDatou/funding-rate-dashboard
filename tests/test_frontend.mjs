@@ -103,6 +103,7 @@ test("latest price is followed by sortable spot and contract volume columns", as
   );
   assert.match(script, /volume !== null && volume < 1e6/);
   assert.match(styles, /\.spot-volume-low \{[\s\S]*color: var\(--negative\);[\s\S]*font-weight: 700;/);
+  assert.match(script, /sortKey: "funding_rate_1y",\s*sortDirection: "asc"/);
   assert.match(script, /formatPrice\(market\.last_price\).*formatPriceChange\(market\.price_change_24h\)/s);
   assert.match(script, /number\.toExponential\(3\)/);
 });

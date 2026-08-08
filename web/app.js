@@ -32,7 +32,7 @@ import {
     exchangeControllers: new Map(),
     unit: "1y",
     sortKey: "funding_rate_1y",
-    sortDirection: "desc",
+    sortDirection: "asc",
     selectedExchanges: new Set(["binance"]),
     minVolume: 10 ** 6,
     intervalHours: null,
