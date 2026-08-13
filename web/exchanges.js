@@ -464,9 +464,69 @@ export function normalizedHistoryPoints(pairs, intervalHours, limit = 1000) {
   }).slice(-limit);
 }
 
-function historyResult(exchange, symbol, intervalHours, pairs, limit) {
+const STANDARD_SETTLEMENT_INTERVAL_HOURS = new Set([1, 2, 4, 8]);
+
+function standardSettlementInterval(point) {
+  const interval = finite(point?.interval_hours);
+  return interval !== null && STANDARD_SETTLEMENT_INTERVAL_HOURS.has(interval) ? interval : null;
+}
+
+export function settlementIntervalChanges(points, officialChange = null) {
+  const changes = [];
+  const firstStableIndex = points.findIndex((point) => standardSettlementInterval(point) !== null);
+  if (firstStableIndex < 0) return changes;
+
+  let stableInterval = standardSettlementInterval(points[firstStableIndex]);
+  for (let index = firstStableIndex + 1; index < points.length; index += 1) {
+    const currentInterval = standardSettlementInterval(points[index]);
+    if (currentInterval === stableInterval) continue;
+
+    const nextInterval = standardSettlementInterval(points[index + 1]);
+    if (nextInterval === stableInterval) continue;
+    const targetInterval = currentInterval ?? nextInterval;
+    if (targetInterval === null || targetInterval === stableInterval) continue;
+
+    changes.push({
+      timestamp: points[index].timestamp,
+      from_hours: stableInterval,
+      to_hours: targetInterval,
+    });
+    stableInterval = targetInterval;
+  }
+
+  const officialTime = finite(officialChange?.timestamp);
+  const officialInterval = standardSettlementInterval({ interval_hours: officialChange?.to_hours });
+  if (officialTime !== null && officialInterval !== null) {
+    const previousPoint = [...points].reverse().find((point) => (
+      Date.parse(point.timestamp) <= officialTime
+      && standardSettlementInterval(point) !== null
+    ));
+    const previousInterval = standardSettlementInterval(previousPoint);
+    if (previousInterval !== null && previousInterval !== officialInterval) {
+      let matchingIndex = -1;
+      for (let index = changes.length - 1; index >= 0; index -= 1) {
+        if (changes[index].to_hours === officialInterval) {
+          matchingIndex = index;
+          break;
+        }
+      }
+      if (matchingIndex >= 0) {
+        changes[matchingIndex].timestamp = officialTime;
+      } else {
+        changes.push({
+          timestamp: officialTime,
+          from_hours: previousInterval,
+          to_hours: officialInterval,
+        });
+      }
+    }
+  }
+  return changes;
+}
+
+function historyResult(exchange, symbol, intervalHours, pairs, limit, intervalChange = null) {
   const points = normalizedHistoryPoints(pairs, intervalHours, limit);
-  return { exchange, symbol, interval_hours: intervalHours, points };
+  return { exchange, symbol, interval_hours: intervalHours, interval_change: intervalChange, points };
 }
 
 async function fetchBinanceMarkets({ signal, onProgress }) {
@@ -579,7 +639,14 @@ async function fetchBinanceHistory(symbol, limit, signal) {
   ]);
   const info = fundingInfo.get(symbol.toUpperCase().trim());
   const interval = finite(info?.fundingIntervalHours) || 8;
-  return historyResult("binance", symbol.toUpperCase().trim(), interval, rows(payload).map((row) => [row.fundingTime, row.fundingRate]), limit);
+  return historyResult(
+    "binance",
+    symbol.toUpperCase().trim(),
+    interval,
+    rows(payload).map((row) => [row.fundingTime, row.fundingRate]),
+    limit,
+    finite(info?.updateTime) === null ? null : { timestamp: finite(info.updateTime), to_hours: interval },
+  );
 }
 
 function okxInterval(row) {

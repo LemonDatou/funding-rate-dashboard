@@ -7,13 +7,15 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260814b";
+  settlementIntervalChanges,
+} from "./exchanges.js?v=20260814c";
 
 (() => {
   "use strict";
 
   const INTERVALS = { "-1": null, 0: 1, 1: 2, 2: 4, 3: 8 };
   const HISTORY_POINT_LIMITS = { binance: 1000, default: 200 };
+  const DEFAULT_HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
   const MARKED_MARKETS_STORAGE_KEY = "funding-matrix-marked-markets";
 
   function loadMarkedMarkets() {
@@ -635,6 +637,10 @@ import {
     return state.unit === "1y" ? dailyRate * 365 : dailyRate / 3;
   }
 
+  function formatIntervalHours(value) {
+    return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  }
+
   function visibleHistoryPoints() {
     if (!state.history?.points?.length) return [];
     const lastIndex = state.history.points.length - 1;
@@ -838,6 +844,11 @@ import {
         }
       }
       if (requestId !== state.historyRequestId || !dialog.open) return;
+      const latestHistoryTime = historyPointTime(points[points.length - 1]);
+      const defaultRangeStart = nearestHistoryIndex(
+        points,
+        latestHistoryTime - DEFAULT_HISTORY_WINDOW_MS,
+      );
       state.history = {
         ...payload,
         points,
@@ -845,7 +856,7 @@ import {
         poolAsset,
         borrowPoints,
         borrowError,
-        rangeStart: 0,
+        rangeStart: defaultRangeStart,
         rangeEnd: points.length - 1,
       };
       $("#history-status").hidden = true;
@@ -868,8 +879,13 @@ import {
     hideChartPointer();
     const visiblePoints = visibleHistoryPoints();
     if (!visiblePoints.length || $("#history-content").hidden) return;
+    const intervalChanges = settlementIntervalChanges(state.history.points, state.history.interval_change);
     const fundingPoints = visiblePoints
-      .map((point) => ({ point, value: historyValue(point), time: parseDate(point.timestamp).getTime() }))
+      .map((point) => ({
+        point,
+        value: historyValue(point),
+        time: parseDate(point.timestamp).getTime(),
+      }))
       .filter((item) => item.value !== null && Number.isFinite(item.time));
     if (!fundingPoints.length) return;
 
@@ -910,6 +926,8 @@ import {
       line: styles.getPropertyValue("--line-soft").trim(),
       accent: styles.getPropertyValue("--accent").trim(),
       borrow: styles.getPropertyValue("--borrow").trim(),
+      negative: styles.getPropertyValue("--negative").trim(),
+      surface: styles.getPropertyValue("--surface").trim(),
       zero: styles.getPropertyValue("--line").trim(),
     };
     const width = rect.width;
@@ -936,6 +954,22 @@ import {
     const timeSpread = Math.max(1, maxTime - minTime);
     const xFor = (time) => padding.left + ((time - minTime) / timeSpread) * plotWidth;
     const yFor = (value) => padding.top + ((maximum - value) / (maximum - minimum)) * plotHeight;
+    const intervalChangePoints = intervalChanges
+      .map((change) => {
+        const time = parseDate(change.timestamp).getTime();
+        if (!Number.isFinite(time) || time < minTime || time > maxTime) return null;
+        const nextIndex = fundingPoints.findIndex((point) => point.time >= time);
+        const nextPoint = nextIndex < 0 ? fundingPoints[fundingPoints.length - 1] : fundingPoints[nextIndex];
+        const previousPoint = nextIndex <= 0 ? nextPoint : fundingPoints[nextIndex - 1];
+        const span = Math.max(1, nextPoint.time - previousPoint.time);
+        const ratio = Math.max(0, Math.min(1, (time - previousPoint.time) / span));
+        return {
+          ...change,
+          time,
+          value: previousPoint.value + (nextPoint.value - previousPoint.value) * ratio,
+        };
+      })
+      .filter(Boolean);
 
     context.clearRect(0, 0, width, height);
     context.font = '11px "SFMono-Regular", Consolas, monospace';
@@ -987,6 +1021,15 @@ import {
     };
     drawSeries(fundingPoints, colors.accent);
     drawSeries(borrowPoints, colors.borrow, { stepped: true });
+    for (const item of intervalChangePoints) {
+      context.beginPath();
+      context.arc(xFor(item.time), yFor(item.value), 4, 0, Math.PI * 2);
+      context.fillStyle = colors.negative;
+      context.fill();
+      context.lineWidth = 1.5;
+      context.strokeStyle = colors.surface;
+      context.stroke();
+    }
 
     const xTickCount = Math.max(3, Math.min(6, Math.floor(plotWidth / 120) + 1));
     context.fillStyle = colors.text;
@@ -1003,7 +1046,7 @@ import {
       context.textAlign = index === 0 ? "left" : index === xTickCount - 1 ? "right" : "center";
       context.fillText(formatAxisDate(time), x, height - 23);
     }
-    canvas._chartGeometry = { fundingPoints, borrowPoints, padding, plotWidth, xFor, yFor };
+    canvas._chartGeometry = { fundingPoints, borrowPoints, intervalChangePoints, padding, plotWidth, xFor, yFor };
   }
 
   function hideChartPointer() {
@@ -1034,12 +1077,17 @@ import {
       return nearest;
     };
     const fundingNearest = nearestByX(geometry.fundingPoints);
+    const intervalChangeNearest = nearestByX(geometry.intervalChangePoints || []);
+    const activeIntervalChange = intervalChangeNearest
+      && Math.abs(geometry.xFor(intervalChangeNearest.time) - x) <= 8
+      ? intervalChangeNearest
+      : null;
     const firstBorrow = geometry.borrowPoints[0];
     const borrowNearest = firstBorrow && x >= geometry.xFor(firstBorrow.time)
       ? nearestByX(geometry.borrowPoints)
       : null;
     const candidates = [fundingNearest, borrowNearest].filter(Boolean);
-    const anchor = candidates.reduce((nearest, item) => {
+    const anchor = activeIntervalChange || candidates.reduce((nearest, item) => {
       const distance = Math.hypot(
         geometry.xFor(item.time) - x,
         geometry.yFor(item.value) - y,
@@ -1054,9 +1102,12 @@ import {
     chartGuide.hidden = false;
     tooltip.textContent = [
       formatTimestamp(anchor.time),
-      `资金费率 ${formatRate(fundingNearest?.value)}`,
+      `资金费率 ${formatRate(activeIntervalChange?.value ?? fundingNearest?.value)}`,
       ...(borrowNearest ? [
         `借款成本 ${formatRate(borrowNearest.rawValue)}`,
+      ] : []),
+      ...(activeIntervalChange ? [
+        `结算周期 ${formatIntervalHours(activeIntervalChange.from_hours)}H → ${formatIntervalHours(activeIntervalChange.to_hours)}H`,
       ] : []),
     ].join("\n");
     const guideLeft = geometry.xFor(anchor.time);

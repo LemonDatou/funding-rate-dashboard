@@ -183,7 +183,7 @@ test("supported assets overlay borrow rates as negative costs on the funding his
   assert.match(script, /state\.unit === "1y" \? dailyRate \* 365 : dailyRate \/ 3/);
   assert.match(script, /value: rawValue === null \? null : -rawValue/);
   assert.match(script, /drawSeries\(borrowPoints, colors\.borrow, \{ stepped: true \}\)/);
-  assert.match(script, /`资金费率 \$\{formatRate\(fundingNearest\?\.value\)\}`/);
+  assert.match(script, /`资金费率 \$\{formatRate\(activeIntervalChange\?\.value \?\? fundingNearest\?\.value\)\}`/);
   assert.match(script, /`借款成本 \$\{formatRate\(borrowNearest\.rawValue\)\}`/);
   assert.doesNotMatch(script, /`原始利率 /);
   assert.match(script, /top: 18,[\s\S]*right: Math\.min\(116, Math\.max\(64, width \* 0\.2\)\)[\s\S]*left: 76/);
@@ -214,6 +214,16 @@ test("history dialog requests enough points to retain hourly interval changes", 
   );
 });
 
+test("history chart marks settlement interval changes and explains them on hover", async () => {
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  assert.match(script, /const intervalChanges = settlementIntervalChanges\(state\.history\.points, state\.history\.interval_change\);/);
+  assert.match(script, /const intervalChangePoints = intervalChanges/);
+  assert.match(script, /context\.arc\(xFor\(item\.time\), yFor\(item\.value\), 4, 0, Math\.PI \* 2\)/);
+  assert.match(script, /context\.fillStyle = colors\.negative/);
+  assert.match(script, /Math\.abs\(geometry\.xFor\(intervalChangeNearest\.time\) - x\) <= 8/);
+  assert.match(script, /`结算周期 \$\{formatIntervalHours\(activeIntervalChange\.from_hours\)\}H → \$\{formatIntervalHours\(activeIntervalChange\.to_hours\)\}H`/);
+});
+
 test("history chart supports a dynamic dual-handle time window", async () => {
   const html = await readFile(new URL("index.html", staticDir), "utf8");
   const script = await readFile(new URL("app.js", staticDir), "utf8");
@@ -227,7 +237,9 @@ test("history chart supports a dynamic dual-handle time window", async () => {
   assert.match(script, /function nearestHistoryIndex\(points, targetTime\)/);
   assert.match(script, /function renderHistoryRangeAxis\(minTime, maxTime\)/);
   assert.match(script, /function updateHistoryRange\(changedInput\)/);
-  assert.match(script, /rangeStart: 0,\s*rangeEnd: points\.length - 1/);
+  assert.match(script, /const DEFAULT_HISTORY_WINDOW_MS = 30 \* 24 \* 60 \* 60 \* 1000;/);
+  assert.match(script, /latestHistoryTime - DEFAULT_HISTORY_WINDOW_MS/);
+  assert.match(script, /rangeStart: defaultRangeStart,\s*rangeEnd: points\.length - 1/);
   assert.match(script, /const visiblePoints = visibleHistoryPoints\(\);/);
   assert.match(script, /const startPercent = \(startTime - minTime\) \/ timeSpan \* 100;/);
   assert.match(script, /input\.min = String\(minTime\);\s*input\.max = String\(maxTime\);/);

@@ -18,6 +18,7 @@ import {
   normalizedHistoryPoints,
   normalizedRates,
   resolveMarginPoolAsset,
+  settlementIntervalChanges,
 } from "../web/exchanges.js";
 
 const originalFetch = globalThis.fetch;
@@ -115,6 +116,36 @@ test("historical funding rates use each settlement window instead of the latest 
   ], 4);
   assert.deepEqual(points.map((point) => point.interval_hours), [1, 1, 1, 4, 4]);
   assert.deepEqual(points.map((point) => point.rate_8h), [0.0008, 0.0008, 0.0008, 0.0002, 0.0002]);
+});
+
+test("settlement interval markers merge transitional gaps into stable changes", () => {
+  const points = [
+    ["2026-07-13T08:00:00.000Z", 1],
+    ["2026-07-13T09:00:00.000Z", 1],
+    ["2026-07-23T00:00:00.000Z", 3],
+    ["2026-07-23T04:00:00.000Z", 4],
+    ["2026-07-23T08:00:00.000Z", 4],
+  ].map(([timestamp, interval_hours]) => ({ timestamp, interval_hours }));
+  assert.deepEqual(settlementIntervalChanges(points), [{
+    timestamp: "2026-07-23T00:00:00.000Z",
+    from_hours: 1,
+    to_hours: 4,
+  }]);
+
+  assert.deepEqual(settlementIntervalChanges(points, {
+    timestamp: Date.parse("2026-07-22T21:01:00.064Z"),
+    to_hours: 4,
+  }), [{
+    timestamp: Date.parse("2026-07-22T21:01:00.064Z"),
+    from_hours: 1,
+    to_hours: 4,
+  }]);
+
+  const missingPointGap = [8, 16, 8].map((interval_hours, index) => ({
+    timestamp: `point-${index}`,
+    interval_hours,
+  }));
+  assert.deepEqual(settlementIntervalChanges(missingPointGap), []);
 });
 
 test("contract market URLs follow each exchange template", () => {
