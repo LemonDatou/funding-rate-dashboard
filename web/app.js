@@ -7,7 +7,7 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260814a";
+} from "./exchanges.js?v=20260814b";
 
 (() => {
   "use strict";
@@ -138,6 +138,28 @@ import {
       month: "2-digit",
       day: "2-digit",
     }).format(date);
+  }
+
+  function formatRangeDate(value) {
+    const date = parseDate(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
+  function formatRangeAxisDate(value) {
+    const date = parseDate(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   function countdown(value) {
@@ -613,9 +635,115 @@ import {
     return state.unit === "1y" ? dailyRate * 365 : dailyRate / 3;
   }
 
-  function renderHistoryStats() {
+  function visibleHistoryPoints() {
+    if (!state.history?.points?.length) return [];
+    const lastIndex = state.history.points.length - 1;
+    const startIndex = Math.max(0, Math.min(lastIndex, Number(state.history.rangeStart) || 0));
+    const endIndex = Math.max(startIndex, Math.min(
+      lastIndex,
+      Number.isFinite(state.history.rangeEnd) ? state.history.rangeEnd : lastIndex,
+    ));
+    return state.history.points.slice(startIndex, endIndex + 1);
+  }
+
+  function historyPointTime(point) {
+    return parseDate(point?.timestamp).getTime();
+  }
+
+  function nearestHistoryIndex(points, targetTime) {
+    if (!points.length || !Number.isFinite(targetTime)) return 0;
+    let low = 0;
+    let high = points.length - 1;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (historyPointTime(points[middle]) < targetTime) low = middle + 1;
+      else high = middle;
+    }
+    if (low === 0) return 0;
+    const previous = low - 1;
+    return Math.abs(historyPointTime(points[low]) - targetTime)
+      < Math.abs(historyPointTime(points[previous]) - targetTime)
+      ? low
+      : previous;
+  }
+
+  function renderHistoryRangeAxis(minTime, maxTime) {
+    const axis = $("#history-range-axis");
+    axis.replaceChildren();
+    const tickCount = 5;
+    const timeSpan = Math.max(0, maxTime - minTime);
+    for (let index = 0; index < tickCount; index += 1) {
+      const ratio = tickCount === 1 ? 0 : index / (tickCount - 1);
+      const tick = document.createElement("span");
+      tick.textContent = formatRangeAxisDate(minTime + timeSpan * ratio);
+      axis.append(tick);
+    }
+  }
+
+  function updateHistoryRangeUI() {
     if (!state.history?.points?.length) return;
-    const historyValues = state.history.points
+    const points = state.history.points;
+    const lastIndex = points.length - 1;
+    const startIndex = Math.max(0, Math.min(lastIndex, Number(state.history.rangeStart) || 0));
+    const endIndex = Math.max(startIndex, Math.min(
+      lastIndex,
+      Number.isFinite(state.history.rangeEnd) ? state.history.rangeEnd : lastIndex,
+    ));
+    state.history.rangeStart = startIndex;
+    state.history.rangeEnd = endIndex;
+
+    const minTime = historyPointTime(points[0]);
+    const maxTime = historyPointTime(points[lastIndex]);
+    const startTime = historyPointTime(points[startIndex]);
+    const endTime = historyPointTime(points[endIndex]);
+    const timeSpan = Math.max(1, maxTime - minTime);
+
+    const startInput = $("#history-range-start");
+    const endInput = $("#history-range-end");
+    for (const input of [startInput, endInput]) {
+      input.min = String(minTime);
+      input.max = String(maxTime);
+      input.step = "1";
+      input.disabled = lastIndex === 0;
+    }
+    startInput.value = String(startTime);
+    endInput.value = String(endTime);
+    startInput.setAttribute("aria-valuetext", formatRangeDate(points[startIndex]?.timestamp));
+    endInput.setAttribute("aria-valuetext", formatRangeDate(points[endIndex]?.timestamp));
+
+    const startPercent = (startTime - minTime) / timeSpan * 100;
+    const endPercent = (endTime - minTime) / timeSpan * 100;
+    const selection = $("#history-range-selection");
+    selection.style.left = `${startPercent}%`;
+    selection.style.right = `${100 - endPercent}%`;
+    $("#history-range-value").textContent = [
+      formatRangeDate(points[startIndex]?.timestamp),
+      formatRangeDate(points[endIndex]?.timestamp),
+    ].join(" — ");
+    renderHistoryRangeAxis(minTime, maxTime);
+  }
+
+  function updateHistoryRange(changedInput) {
+    if (!state.history?.points?.length) return;
+    const points = state.history.points;
+    const lastIndex = points.length - 1;
+    let startIndex = nearestHistoryIndex(points, Number($("#history-range-start").value));
+    let endIndex = nearestHistoryIndex(points, Number($("#history-range-end").value));
+    if (startIndex >= endIndex && lastIndex > 0) {
+      if (changedInput.id === "history-range-start") startIndex = Math.max(0, endIndex - 1);
+      else endIndex = Math.min(lastIndex, startIndex + 1);
+    }
+    state.history.rangeStart = startIndex;
+    state.history.rangeEnd = endIndex;
+    updateHistoryRangeUI();
+    renderHistoryStats();
+    requestAnimationFrame(drawHistoryChart);
+  }
+
+  function renderHistoryStats() {
+    const visiblePoints = visibleHistoryPoints();
+    if (!visiblePoints.length) return;
+    const historyValues = visiblePoints
       .map((point) => ({
         value: historyValue(point),
         time: parseDate(point.timestamp).getTime(),
@@ -660,9 +788,10 @@ import {
   function renderHistoryData() {
     const body = $("#history-data-rows");
     body.replaceChildren();
-    if (!state.history?.points?.length) return;
+    const visiblePoints = visibleHistoryPoints();
+    if (!visiblePoints.length) return;
     const fragment = document.createDocumentFragment();
-    for (const point of [...state.history.points].reverse()) {
+    for (const point of [...visiblePoints].reverse()) {
       const row = document.createElement("tr");
       row.append(cell(formatTimestamp(point.timestamp)), cell(formatRate(historyValue(point)), `numeric ${rateClass(historyValue(point))}`));
       fragment.append(row);
@@ -709,13 +838,23 @@ import {
         }
       }
       if (requestId !== state.historyRequestId || !dialog.open) return;
-      state.history = { ...payload, points, market, poolAsset, borrowPoints, borrowError };
+      state.history = {
+        ...payload,
+        points,
+        market,
+        poolAsset,
+        borrowPoints,
+        borrowError,
+        rangeStart: 0,
+        rangeEnd: points.length - 1,
+      };
       $("#history-status").hidden = true;
       $("#history-content").hidden = false;
       $("#borrow-legend").hidden = !borrowPoints.length;
       const borrowStatus = $("#borrow-status");
       borrowStatus.hidden = !poolAsset || Boolean(borrowPoints.length);
       borrowStatus.textContent = borrowError ? "借款利率加载失败" : "借款利率暂无历史";
+      updateHistoryRangeUI();
       renderHistoryStats();
       requestAnimationFrame(drawHistoryChart);
     } catch (error) {
@@ -727,8 +866,9 @@ import {
 
   function drawHistoryChart() {
     hideChartPointer();
-    if (!state.history?.points?.length || $("#history-content").hidden) return;
-    const fundingPoints = state.history.points
+    const visiblePoints = visibleHistoryPoints();
+    if (!visiblePoints.length || $("#history-content").hidden) return;
+    const fundingPoints = visiblePoints
       .map((point) => ({ point, value: historyValue(point), time: parseDate(point.timestamp).getTime() }))
       .filter((item) => item.value !== null && Number.isFinite(item.time));
     if (!fundingPoints.length) return;
@@ -1024,6 +1164,8 @@ import {
     });
     canvas.addEventListener("pointermove", handleChartPointer);
     canvas.addEventListener("pointerleave", hideChartPointer);
+    $("#history-range-start").addEventListener("input", (event) => updateHistoryRange(event.target));
+    $("#history-range-end").addEventListener("input", (event) => updateHistoryRange(event.target));
 
     const themeSelect = $("#theme-select");
     const storedTheme = localStorage.getItem("funding-matrix-theme") || "system";

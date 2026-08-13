@@ -214,6 +214,28 @@ test("history dialog requests enough points to retain hourly interval changes", 
   );
 });
 
+test("history chart supports a dynamic dual-handle time window", async () => {
+  const html = await readFile(new URL("index.html", staticDir), "utf8");
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  const styles = await readFile(new URL("styles.css", staticDir), "utf8");
+  assert.match(html, /id="history-range-start"[^>]*type="range"/);
+  assert.match(html, /id="history-range-end"[^>]*type="range"/);
+  assert.match(html, /id="history-range-selection"/);
+  assert.match(html, /id="history-range-value"/);
+  assert.match(html, /id="history-range-axis"/);
+  assert.match(script, /function visibleHistoryPoints\(\)/);
+  assert.match(script, /function nearestHistoryIndex\(points, targetTime\)/);
+  assert.match(script, /function renderHistoryRangeAxis\(minTime, maxTime\)/);
+  assert.match(script, /function updateHistoryRange\(changedInput\)/);
+  assert.match(script, /rangeStart: 0,\s*rangeEnd: points\.length - 1/);
+  assert.match(script, /const visiblePoints = visibleHistoryPoints\(\);/);
+  assert.match(script, /const startPercent = \(startTime - minTime\) \/ timeSpan \* 100;/);
+  assert.match(script, /input\.min = String\(minTime\);\s*input\.max = String\(maxTime\);/);
+  assert.match(styles, /\.history-range-input::\-webkit-slider-thumb/);
+  assert.match(styles, /\.history-range-axis \{/);
+  assert.match(styles, /pointer-events: auto;/);
+});
+
 test("history stats label and calculate the average over the latest seven days", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   assert.match(script, /latestHistoryTime - 7 \* 24 \* 60 \* 60 \* 1000/);

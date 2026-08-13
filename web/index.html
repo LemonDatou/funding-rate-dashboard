@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="五家交易所永续合约资金费率看板" />
     <title>Funding Matrix</title>
-    <link rel="stylesheet" href="./styles.css?v=20260808b" />
+    <link rel="stylesheet" href="./styles.css?v=20260814b" />
   </head>
   <body>
     <main class="shell">
@@ -138,6 +138,19 @@
           <div id="chart-guide" class="chart-guide" aria-hidden="true" hidden></div>
           <div id="chart-tooltip" class="chart-tooltip" hidden></div>
         </div>
+        <div id="history-range" class="history-range" aria-label="历史曲线时间窗口">
+          <div class="history-range-head">
+            <span>时间窗口</span>
+            <output id="history-range-value">—</output>
+          </div>
+          <div class="history-range-track">
+            <div class="history-range-rail" aria-hidden="true"></div>
+            <div id="history-range-selection" class="history-range-selection" aria-hidden="true"></div>
+            <input id="history-range-start" class="history-range-input" type="range" min="0" max="1" value="0" step="1" aria-label="曲线起始时间" />
+            <input id="history-range-end" class="history-range-input" type="range" min="0" max="1" value="1" step="1" aria-label="曲线结束时间" />
+          </div>
+          <div id="history-range-axis" class="history-range-axis" aria-hidden="true"></div>
+        </div>
         <details class="history-data">
           <summary>查看历史数据</summary>
           <div class="history-table-wrap">
@@ -152,6 +165,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="./app.js?v=20260814a"></script>
+    <script type="module" src="./app.js?v=20260814b"></script>
   </body>
 </html>
