@@ -141,6 +141,22 @@ test("settlement interval markers merge transitional gaps into stable changes", 
     to_hours: 4,
   }]);
 
+  const aceTransition = [
+    ["2026-08-10T01:00:00.000Z", 1],
+    ["2026-08-10T02:00:00.000Z", 1],
+    ["2026-08-10T04:00:00.000Z", 2],
+    ["2026-08-10T08:00:00.000Z", 4],
+    ["2026-08-10T12:00:00.000Z", 4],
+  ].map(([timestamp, interval_hours]) => ({ timestamp, interval_hours }));
+  assert.deepEqual(settlementIntervalChanges(aceTransition, {
+    timestamp: Date.parse("2026-08-10T02:01:00.068Z"),
+    to_hours: 4,
+  }), [{
+    timestamp: Date.parse("2026-08-10T02:01:00.068Z"),
+    from_hours: 1,
+    to_hours: 4,
+  }]);
+
   const missingPointGap = [8, 16, 8].map((interval_hours, index) => ({
     timestamp: `point-${index}`,
     interval_hours,

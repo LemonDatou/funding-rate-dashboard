@@ -472,7 +472,7 @@ function standardSettlementInterval(point) {
 }
 
 export function settlementIntervalChanges(points, officialChange = null) {
-  const changes = [];
+  let changes = [];
   const firstStableIndex = points.findIndex((point) => standardSettlementInterval(point) !== null);
   if (firstStableIndex < 0) return changes;
 
@@ -503,22 +503,12 @@ export function settlementIntervalChanges(points, officialChange = null) {
     ));
     const previousInterval = standardSettlementInterval(previousPoint);
     if (previousInterval !== null && previousInterval !== officialInterval) {
-      let matchingIndex = -1;
-      for (let index = changes.length - 1; index >= 0; index -= 1) {
-        if (changes[index].to_hours === officialInterval) {
-          matchingIndex = index;
-          break;
-        }
-      }
-      if (matchingIndex >= 0) {
-        changes[matchingIndex].timestamp = officialTime;
-      } else {
-        changes.push({
-          timestamp: officialTime,
-          from_hours: previousInterval,
-          to_hours: officialInterval,
-        });
-      }
+      changes = changes.filter((change) => Date.parse(change.timestamp) < officialTime);
+      changes.push({
+        timestamp: officialTime,
+        from_hours: previousInterval,
+        to_hours: officialInterval,
+      });
     }
   }
   return changes;
