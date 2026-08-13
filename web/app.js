@@ -7,12 +7,13 @@ import {
   fetchMarkets,
   fetchOpenInterest,
   resolveMarginPoolAsset,
-} from "./exchanges.js?v=20260808a";
+} from "./exchanges.js?v=20260814a";
 
 (() => {
   "use strict";
 
   const INTERVALS = { "-1": null, 0: 1, 1: 2, 2: 4, 3: 8 };
+  const HISTORY_POINT_LIMITS = { binance: 1000, default: 200 };
   const MARKED_MARKETS_STORAGE_KEY = "funding-matrix-marked-markets";
 
   function loadMarkedMarkets() {
@@ -680,7 +681,11 @@ import {
     if (!dialog.open) dialog.showModal();
 
     try {
-      const payload = await fetchHistory(market.exchange, market.symbol, 200);
+      const payload = await fetchHistory(
+        market.exchange,
+        market.symbol,
+        HISTORY_POINT_LIMITS[market.exchange] ?? HISTORY_POINT_LIMITS.default,
+      );
       if (requestId !== state.historyRequestId || !dialog.open) return;
       const points = Array.isArray(payload.points) ? payload.points : [];
       if (!points.length) throw new Error("该市场暂无公开历史记录");
