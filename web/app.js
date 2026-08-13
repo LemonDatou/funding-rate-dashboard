@@ -8,7 +8,7 @@ import {
   fetchOpenInterest,
   resolveMarginPoolAsset,
   settlementIntervalChanges,
-} from "./exchanges.js?v=20260814c";
+} from "./exchanges.js?v=20260814d";
 
 (() => {
   "use strict";
