@@ -204,6 +204,7 @@ test("Binance asset labels use non-spot assets from the official Alpha list", ()
   assert.equal(binanceAssetLabel({ underlyingType: "COIN", underlyingSubType: ["Alpha"] }, alphaAssets.has("MISSING")), null);
   assert.equal(binanceAssetLabel({ underlyingType: "COMMODITY" }, true), "大宗商品");
   assert.equal(binanceAssetLabel({ underlyingType: "EQUITY" }, true), "股票/ETF");
+  assert.equal(binanceAssetLabel({ underlyingType: "CN_EQUITY" }), "A股");
   assert.equal(binanceAssetLabel({ underlyingType: "HK_EQUITY" }), "港股");
   assert.equal(binanceAssetLabel({ underlyingType: "KR_EQUITY" }), "韩股");
   assert.equal(binanceAssetLabel({ underlyingType: "INDEX" }), "指数");

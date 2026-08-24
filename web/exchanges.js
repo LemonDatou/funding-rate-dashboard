@@ -114,6 +114,7 @@ let binanceFundingInfoCache = null;
 const BINANCE_ASSET_LABELS = Object.freeze({
   COMMODITY: "大宗商品",
   EQUITY: "股票/ETF",
+  CN_EQUITY: "A股",
   HK_EQUITY: "港股",
   KR_EQUITY: "韩股",
   INDEX: "指数",
