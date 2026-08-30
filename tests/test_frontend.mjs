@@ -130,6 +130,20 @@ test("clicking a market name toggles a persistent red mark", async () => {
   assert.match(styles, /\.symbol-button\.marked \{\s*color: var\(--negative\);/);
 });
 
+test("validated fragment imports overwrite only this browser's Binance marks", async () => {
+  const html = await readFile(new URL("index.html", staticDir), "utf8");
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  const styles = await readFile(new URL("styles.css", staticDir), "utf8");
+  assert.match(script, /parseMarkSyncHash\(location\.hash\)/);
+  assert.match(script, /history\.replaceState\(null, "", `\$\{location\.pathname\}\$\{location\.search\}`\)/);
+  assert.match(script, /state\.markedMarkets = new Set\(result\.keys\)/);
+  assert.match(script, /if \(exchange === "binance"\) applyPendingMarkSync\(\)/);
+  assert.match(script, /label: "撤销"/);
+  assert.match(styles, /\.toast-action/);
+  assert.match(html, /app\.js\?v=20260830a/);
+  assert.doesNotMatch(script, /fetch\([^\n]*mark-sync/);
+});
+
 test("rates use four decimals", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   assert.match(script, /percent\.toFixed\(4\)/);

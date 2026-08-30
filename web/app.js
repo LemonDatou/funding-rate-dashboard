@@ -8,7 +8,11 @@ import {
   fetchOpenInterest,
   resolveMarginPoolAsset,
   settlementIntervalChanges,
-} from "./exchanges.js?v=20260814d";
+} from "./exchanges.js?v=20260830a";
+import {
+  binanceMarkKeys,
+  parseMarkSyncHash,
+} from "./mark-sync.js?v=20260830a";
 
 (() => {
   "use strict";
@@ -17,6 +21,10 @@ import {
   const HISTORY_POINT_LIMITS = { binance: 1000, default: 200 };
   const DEFAULT_HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
   const MARKED_MARKETS_STORAGE_KEY = "funding-matrix-marked-markets";
+  const markSyncRequest = parseMarkSyncHash(location.hash);
+  if (markSyncRequest) {
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+  }
 
   function loadMarkedMarkets() {
     try {
@@ -43,6 +51,7 @@ import {
     showStockLike: false,
     onlyMarked: false,
     markedMarkets: loadMarkedMarkets(),
+    pendingMarkSyncAssets: markSyncRequest?.assets || null,
     search: "",
     loadingOpenInterest: new Set(),
     marginPoolAssets: new Set(),
@@ -261,12 +270,40 @@ import {
     const key = marketKey(market);
     if (state.markedMarkets.has(key)) state.markedMarkets.delete(key);
     else state.markedMarkets.add(key);
+    persistMarkedMarkets();
+    renderRows();
+  }
+
+  function persistMarkedMarkets() {
     try {
       localStorage.setItem(MARKED_MARKETS_STORAGE_KEY, JSON.stringify([...state.markedMarkets]));
     } catch (_) {
       // Keep the mark for this page even when browser storage is unavailable.
     }
-    renderRows();
+  }
+
+  function applyPendingMarkSync() {
+    if (!state.pendingMarkSyncAssets) return;
+    const previousMarks = new Set(state.markedMarkets);
+    const result = binanceMarkKeys(state.markets, state.pendingMarkSyncAssets);
+    state.markedMarkets = new Set(result.keys);
+    state.pendingMarkSyncAssets = null;
+    persistMarkedMarkets();
+    const missing = result.unmatchedAssets.length
+      ? `；${result.unmatchedAssets.length} 个未找到：${result.unmatchedAssets.join("、")}`
+      : "";
+    showToast(
+      `已用 ${result.matchedAssets.length} 个币种覆盖 Binance 标记${missing}`,
+      {
+        label: "撤销",
+        run: () => {
+          state.markedMarkets = previousMarks;
+          persistMarkedMarkets();
+          renderRows();
+          showToast("已恢复同步前的标记");
+        },
+      },
+    );
   }
 
   function visibleMarkets() {
@@ -543,12 +580,20 @@ import {
     }
   }
 
-  function showToast(message) {
+  function showToast(message, action = null) {
     const toast = $("#toast");
-    toast.textContent = message;
+    toast.replaceChildren(document.createTextNode(message));
+    if (action?.label && typeof action.run === "function") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "toast-action";
+      button.textContent = action.label;
+      button.addEventListener("click", action.run, { once: true });
+      toast.append(button);
+    }
     toast.hidden = false;
     clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => { toast.hidden = true; }, 4_500);
+    showToast.timer = setTimeout(() => { toast.hidden = true; }, action ? 9_000 : 4_500);
   }
 
   function replaceExchangeMarkets(exchange, markets) {
@@ -605,6 +650,7 @@ import {
       if (controller.signal.aborted) return;
       replaceExchangeMarkets(exchange, markets);
       state.loadedExchanges.add(exchange);
+      if (exchange === "binance") applyPendingMarkSync();
       state.generatedAt = new Date().toISOString();
       $("#freshness").textContent = `更新于 ${formatTimestamp(state.generatedAt)}`;
     } catch (error) {
@@ -1233,6 +1279,7 @@ import {
   }
 
   bindControls();
+  if (markSyncRequest?.error) showToast(markSyncRequest.error);
   loadMarginPoolAssets();
   loadExchange("binance");
   setInterval(updateCountdowns, 30_000);
