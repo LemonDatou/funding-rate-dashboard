@@ -48,6 +48,17 @@ export function resolveMarginPoolAsset(market, supportedAssets) {
   return null;
 }
 
+export function resolveFlexibleLoanAsset(market, supportedAssets) {
+  if (!market || market.exchange !== "binance" || typeof supportedAssets?.has !== "function") {
+    return null;
+  }
+  const baseAsset = String(market.base_asset || "").split(":").pop().trim().toUpperCase();
+  if (!baseAsset || baseAsset.length > 64 || /[\u0000-\u001f\u007f]/.test(baseAsset)) return null;
+  const underlying = baseAsset.replace(BINANCE_CONTRACT_MULTIPLIER, "") || baseAsset;
+  if (supportedAssets.has(underlying)) return underlying;
+  return supportedAssets.has(baseAsset) ? baseAsset : null;
+}
+
 export async function fetchMarginInterestHistory(
   asset,
   { fromMs = 0, toMs = Date.now(), signal } = {},

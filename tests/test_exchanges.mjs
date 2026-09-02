@@ -17,6 +17,7 @@ import {
   marginPoolSearch,
   normalizedHistoryPoints,
   normalizedRates,
+  resolveFlexibleLoanAsset,
   resolveMarginPoolAsset,
   settlementIntervalChanges,
 } from "../web/exchanges.js";
@@ -240,6 +241,12 @@ test("only unlabelled Binance spot-like contracts link to normalized margin asse
   assert.equal(resolveMarginPoolAsset({ exchange: "binance", base_asset: "1000BONK", asset_label: null }, supported), "BONK");
   assert.equal(resolveMarginPoolAsset({ exchange: "binance", base_asset: "1000SATS", asset_label: null }, supported), "1000SATS");
   assert.equal(resolveMarginPoolAsset({ exchange: "binance", base_asset: "MISSING", asset_label: null }, supported), null);
+
+  const flexible = new Set(["BTC", "BONK", "ALPHA"]);
+  assert.equal(resolveFlexibleLoanAsset({ exchange: "binance", base_asset: "BTC", asset_label: null }, flexible), "BTC");
+  assert.equal(resolveFlexibleLoanAsset({ exchange: "binance", base_asset: "1000BONK", asset_label: null }, flexible), "BONK");
+  assert.equal(resolveFlexibleLoanAsset({ exchange: "binance", base_asset: "ALPHA", asset_label: "Alpha" }, flexible), "ALPHA");
+  assert.equal(resolveFlexibleLoanAsset({ exchange: "okx", base_asset: "BTC", asset_label: null }, flexible), null);
 });
 
 test("HTTP client rejects non-official hosts and retries transient failures", async () => {

@@ -140,13 +140,24 @@ test("validated fragment imports overwrite only this browser's Binance marks", a
   assert.match(script, /if \(exchange === "binance"\) applyPendingMarkSync\(\)/);
   assert.match(script, /label: "撤销"/);
   assert.match(styles, /\.toast-action/);
-  assert.match(html, /app\.js\?v=20260830a/);
+  assert.match(html, /app\.js\?v=20260902a/);
   assert.doesNotMatch(script, /fetch\([^\n]*mark-sync/);
 });
 
 test("rates use four decimals", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
   assert.match(script, /percent\.toFixed\(4\)/);
+});
+
+test("flexible loan labels use a persistent one-hour browser cache", async () => {
+  const script = await readFile(new URL("app.js", staticDir), "utf8");
+  assert.match(script, /funding-matrix-flexible-loanable-assets-v1/);
+  assert.match(script, /FLEXIBLE_LOAN_CACHE_MS = 60 \* 60_000/);
+  assert.match(script, /Date\.now\(\) < state\.flexibleLoanCacheExpiresAt/);
+  assert.match(script, /\/margin-pool\/api\/v1\/flexible-loanable-assets/);
+  assert.match(script, /localStorage\.setItem\(FLEXIBLE_LOAN_STORAGE_KEY/);
+  assert.match(script, /resolveFlexibleLoanAsset\(market, state\.flexibleLoanAssets\)/);
+  assert.match(script, /labels\.push\("活期"\)/);
 });
 
 test("interval filter is an inclusive upper bound", async () => {
@@ -166,8 +177,9 @@ test("positive rates are green and negative rates are red in both themes", async
 
 test("Binance asset labels appear after the trading pair only", async () => {
   const script = await readFile(new URL("app.js", staticDir), "utf8");
-  assert.match(script, /market\.exchange === "binance" && market\.asset_label/);
-  assert.match(script, /`\$\{symbol\} \(\$\{market\.asset_label\}\)`/);
+  assert.match(script, /if \(market\.exchange !== "binance"\) return symbol/);
+  assert.match(script, /if \(market\.asset_label\) labels\.push\(market\.asset_label\)/);
+  assert.match(script, /`\$\{symbol\} \$\{labels\.map\(\(label\) => `\(\$\{label\}\)`\)\.join\(" "\)\}`/);
 });
 
 test("prices open contracts while names toggle marks and borrow interest opens Margin Pool", async () => {

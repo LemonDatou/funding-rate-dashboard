@@ -6,13 +6,14 @@ import {
   fetchMarginInterestHistory,
   fetchMarkets,
   fetchOpenInterest,
+  resolveFlexibleLoanAsset,
   resolveMarginPoolAsset,
   settlementIntervalChanges,
-} from "./exchanges.js?v=20260830a";
+} from "./exchanges.js?v=20260902a";
 import {
   binanceMarkKeys,
   parseMarkSyncHash,
-} from "./mark-sync.js?v=20260830a";
+} from "./mark-sync.js?v=20260902a";
 
 (() => {
   "use strict";
@@ -21,6 +22,8 @@ import {
   const HISTORY_POINT_LIMITS = { binance: 1000, default: 200 };
   const DEFAULT_HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
   const MARKED_MARKETS_STORAGE_KEY = "funding-matrix-marked-markets";
+  const FLEXIBLE_LOAN_STORAGE_KEY = "funding-matrix-flexible-loanable-assets-v1";
+  const FLEXIBLE_LOAN_CACHE_MS = 60 * 60_000;
   const markSyncRequest = parseMarkSyncHash(location.hash);
   if (markSyncRequest) {
     history.replaceState(null, "", `${location.pathname}${location.search}`);
@@ -34,6 +37,25 @@ import {
       return new Set();
     }
   }
+
+  function loadFlexibleLoanCache() {
+    try {
+      const value = JSON.parse(localStorage.getItem(FLEXIBLE_LOAN_STORAGE_KEY) || "null");
+      const assets = Array.isArray(value?.assets)
+        ? value.assets
+          .filter((asset) => typeof asset === "string" && asset)
+          .map((asset) => asset.toUpperCase())
+        : [];
+      return {
+        assets: new Set(assets),
+        expiresAt: finite(value?.expires_at_ms) ?? 0,
+      };
+    } catch (_) {
+      return { assets: new Set(), expiresAt: 0 };
+    }
+  }
+
+  const flexibleLoanCache = loadFlexibleLoanCache();
 
   const state = {
     markets: [],
@@ -57,6 +79,9 @@ import {
     marginPoolAssets: new Set(),
     marginPoolInterestRates: new Map(),
     marginPoolRequest: null,
+    flexibleLoanAssets: flexibleLoanCache.assets,
+    flexibleLoanCacheExpiresAt: flexibleLoanCache.expiresAt,
+    flexibleLoanRequest: null,
     generatedAt: null,
     history: null,
     historyRequestId: 0,
@@ -247,9 +272,11 @@ import {
     } else {
       symbol = market.symbol;
     }
-    return market.exchange === "binance" && market.asset_label
-      ? `${symbol} (${market.asset_label})`
-      : symbol;
+    if (market.exchange !== "binance") return symbol;
+    const labels = [];
+    if (market.asset_label) labels.push(market.asset_label);
+    if (resolveFlexibleLoanAsset(market, state.flexibleLoanAssets)) labels.push("活期");
+    return labels.length ? `${symbol} ${labels.map((label) => `(${label})`).join(" ")}` : symbol;
   }
 
   function isAlphaMarket(market) {
@@ -358,6 +385,47 @@ import {
       await request;
     } finally {
       if (state.marginPoolRequest === request) state.marginPoolRequest = null;
+    }
+  }
+
+  async function loadFlexibleLoanAssets() {
+    if (Date.now() < state.flexibleLoanCacheExpiresAt) return;
+    if (state.flexibleLoanRequest) return state.flexibleLoanRequest;
+    const request = (async () => {
+      try {
+        const response = await fetch("/margin-pool/api/v1/flexible-loanable-assets", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          credentials: "omit",
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        if (!Array.isArray(payload?.assets)) throw new Error("invalid flexible loan asset list");
+        const assets = payload.assets
+          .filter((asset) => typeof asset === "string" && asset)
+          .map((asset) => asset.toUpperCase());
+        const expiresAt = Date.now() + FLEXIBLE_LOAN_CACHE_MS;
+        state.flexibleLoanAssets = new Set(assets);
+        state.flexibleLoanCacheExpiresAt = expiresAt;
+        try {
+          localStorage.setItem(FLEXIBLE_LOAN_STORAGE_KEY, JSON.stringify({
+            assets,
+            expires_at_ms: expiresAt,
+          }));
+        } catch (_) {
+          // The in-memory cache still avoids duplicate requests in this tab.
+        }
+        renderRows();
+      } catch (_) {
+        // Keep the last successful local snapshot when the read-only API is unavailable.
+      }
+    })();
+    state.flexibleLoanRequest = request;
+    try {
+      await request;
+    } finally {
+      if (state.flexibleLoanRequest === request) state.flexibleLoanRequest = null;
     }
   }
 
@@ -1281,7 +1349,9 @@ import {
   bindControls();
   if (markSyncRequest?.error) showToast(markSyncRequest.error);
   loadMarginPoolAssets();
+  loadFlexibleLoanAssets();
   loadExchange("binance");
   setInterval(updateCountdowns, 30_000);
   setInterval(loadMarginPoolAssets, 5 * 60_000);
+  setInterval(loadFlexibleLoanAssets, 60_000);
 })();
